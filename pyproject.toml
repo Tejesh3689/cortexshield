@@ -3,7 +3,12 @@ name = "cortexshield"
 version = "0.1.0"
 description = "CortexShield Monorepo"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "alembic>=1.11.0",
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.28.0",
+    "psycopg2-binary>=2.9.0",
+]
 
 [tool.uv.workspace]
 members = [
