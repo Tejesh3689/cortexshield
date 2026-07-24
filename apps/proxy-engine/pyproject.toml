@@ -3,4 +3,15 @@ name = "proxy-engine"
 version = "0.1.0"
 description = "CortexShield Proxy Engine"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    # cortex_healing is installed as a local path so proxy-engine can call
+    # process_memory_write_job() directly (hackathon in-process mode).
+    # In the full NATS architecture, healing-worker is a separate process and
+    # this dependency is removed — see docs/adr/0013-hackathon-nats-opa-removal.md.
+    "cortex-healing @ file://../healing-worker",
+    "cortex-schemas @ file://../../../libs/cortex_schemas",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends.legacy:build"

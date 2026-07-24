@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-import nats
+# HACKATHON: nats import removed — see docs/adr/0013-hackathon-nats-opa-removal.md
 
 # We should ideally use cortex_auth here, but we mock the JWT verify for the standalone file
 # In a real setup: from cortex_auth import validate_browser_session
@@ -42,32 +42,25 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-async def nats_listener():
-    global nc
-    try:
-        nc = await nats.connect(os.getenv("NATS_URL", "nats://localhost:4222"))
-        
-        async def message_handler(msg):
-            try:
-                data = json.loads(msg.data.decode())
-                tenant_id = data.get("tenant_id")
-                if tenant_id:
-                    await manager.broadcast_to_tenant(tenant_id, data)
-            except Exception as e:
-                logger.error(f"Error handling NATS graph update: {e}")
-                
-        await nc.subscribe("graph.updates", cb=message_handler)
-    except Exception as e:
-        logger.error(f"Failed to connect to NATS in realtime-gateway: {e}")
+async def _nats_listener_stub():
+    """
+    HACKATHON STUB: In the full architecture, this subscribes to NATS "graph.updates"
+    and calls manager.broadcast_to_tenant() per message.
+    NATS removed — see docs/adr/0013-hackathon-nats-opa-removal.md.
+    WebSocket connections are accepted but receive no push events in this build.
+    """
+    logger.warning(
+        "realtime-gateway: NATS listener is disabled (hackathon build — ADR-0013). "
+        "WebSocket connections are open but graph push events will not arrive."
+    )
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(nats_listener())
+    asyncio.create_task(_nats_listener_stub())
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    if nc and not nc.is_closed:
-        await nc.close()
+    pass  # No NATS connection to close
 
 def validate_browser_session(token: str) -> str:
     """

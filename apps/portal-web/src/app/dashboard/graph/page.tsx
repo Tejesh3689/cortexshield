@@ -19,9 +19,15 @@ export default function GraphView() {
     setGraphData({ nodes: [], links: [] });
     
     // 2. Connect to realtime-gateway WebSocket
+    // URL must be provided via NEXT_PUBLIC_WS_URL — no localhost fallback.
     const connectWs = async () => {
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+      if (!wsUrl) {
+        console.warn("NEXT_PUBLIC_WS_URL is not set — realtime graph updates disabled.");
+        return;
+      }
       const token = await getToken();
-      const ws = new WebSocket(`ws://localhost:8002/ws/graph?token=${token}&tenant=${tenantId}`);
+      const ws = new WebSocket(`${wsUrl}?token=${token}&tenant=${tenantId}`);
       
       ws.onmessage = (event) => {
         const update = JSON.parse(event.data);

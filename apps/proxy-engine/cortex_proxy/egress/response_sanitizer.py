@@ -1,11 +1,11 @@
 import json
-import os
-import nats
-from datetime import datetime
 import logging
+from datetime import datetime
 from cortex_schemas.models import ToolCallResponse, FirewallDecision, FirewallDecisionType
 from cortex_security_rules.poison import contains_poison, redact_poison
 from ..firewall.opa_client import evaluate_egress_policy
+
+# HACKATHON: NATS audit publish removed — see docs/adr/0013-hackathon-nats-opa-removal.md
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +30,12 @@ async def sanitize_tool_response(response: ToolCallResponse, tenant_id: str, age
             decided_at=datetime.utcnow()
         )
         
-        try:
-            nc = await nats.connect(os.getenv("NATS_URL", "nats://localhost:4222"))
-            js = nc.jetstream()
-            await js.publish("audit.firewall_decisions", decision.model_dump_json().encode())
-            await nc.close()
-        except Exception as e:
-            logger.error(f"Failed to publish egress audit log: {e}")
-        
+        # HACKATHON: Audit publish via NATS omitted. Logging to stderr instead.
+        logger.warning(
+            f"EGRESS_BLOCKED | tenant={decision.tenant_id} tool={decision.tool_name} "
+            f"reason={decision.reason}"
+        )
+
         # 3. Apply Policy
         if action == "hard-fail":
             # Strip payload entirely and return explicit error

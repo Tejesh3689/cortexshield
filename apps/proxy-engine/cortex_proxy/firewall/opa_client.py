@@ -1,43 +1,31 @@
-import os
-import httpx
+"""
+opa_client.py — RETIRED for hackathon build.
+
+In the full architecture, this module calls the OPA policy-service
+(http://<OPA_URL>/v1/data/cortexshield) to evaluate per-tenant Rego rules
+for tool allowlisting and egress control.
+
+HACKATHON SIMPLIFICATION (see docs/adr/0013-hackathon-nats-opa-removal.md):
+OPA has been removed from the hot path. action_firewall.py now evaluates the
+Python-native FIREWALL_DEFAULT_RESTRICTED_TOOLS denylist directly.
+
+This file is retained as a compile-time no-op to avoid import errors if any
+code still references it. It exports the original function signatures with
+pass-through stubs. Remove this file and restore the real implementations
+when OPA is re-introduced post-hackathon.
+"""
 import logging
 
 logger = logging.getLogger(__name__)
 
+
 async def evaluate_policy(tenant_id: str, tool_name: str, context_trust: float) -> dict:
-    opa_url = os.getenv("OPA_URL", "http://localhost:8181/v1/data/cortexshield")
-    payload = {
-        "input": {
-            "tenant_id": tenant_id,
-            "tool_name": tool_name,
-            "context_trust": context_trust
-        }
-    }
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(opa_url, json=payload, timeout=0.1)
-            resp.raise_for_status()
-            data = resp.json().get("result", {})
-            return data
-    except Exception as e:
-        logger.warning(f"OPA policy check failed: {e}. Defaulting to ALLOW.")
-        return {"allow": True, "reason": "Default allow (policy engine unavailable or empty)"}
+    """Stub. OPA removed for hackathon — see module docstring."""
+    logger.debug("opa_client.evaluate_policy called but OPA is disabled for hackathon.")
+    return {"allow": True, "reason": "OPA disabled (hackathon build — see ADR-0013)"}
+
 
 async def evaluate_egress_policy(tenant_id: str) -> str:
-    """Evaluates the egress policy for a given tenant. Returns 'hard-fail' or 'redact'."""
-    opa_url = os.getenv("OPA_URL_EGRESS", "http://localhost:8181/v1/data/cortexshield/egress")
-    payload = {
-        "input": {
-            "tenant_id": tenant_id
-        }
-    }
-    
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(opa_url, json=payload, timeout=0.1)
-            resp.raise_for_status()
-            return resp.json().get("result", {}).get("action", "hard-fail")
-    except Exception as e:
-        logger.warning(f"OPA egress policy check failed: {e}. Defaulting to hard-fail.")
-        return "hard-fail"
+    """Stub. OPA removed for hackathon — see module docstring."""
+    logger.debug("opa_client.evaluate_egress_policy called but OPA is disabled for hackathon.")
+    return "hard-fail"

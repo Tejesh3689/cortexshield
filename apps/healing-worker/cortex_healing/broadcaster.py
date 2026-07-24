@@ -1,22 +1,25 @@
-import os
-import json
-import nats
+"""
+broadcaster.py — NATS-based graph update publisher. STUB for hackathon build.
+
+In the full architecture, this module publishes node/edge change events to the
+"graph.updates" NATS subject, which realtime-gateway subscribes to and relays
+as WebSocket messages to portal-web.
+
+HACKATHON SIMPLIFICATION (see docs/adr/0013-hackathon-nats-opa-removal.md):
+NATS is removed. This function is a no-op stub. The realtime-gateway WebSocket
+connection falls back gracefully when NEXT_PUBLIC_WS_URL is not set.
+"""
 import logging
 
 logger = logging.getLogger(__name__)
 
-async def broadcast_graph_update(tenant_id: str, update_type: str, data: dict):
+
+async def broadcast_graph_update(tenant_id: str, update_type: str, data: dict) -> None:
     """
-    Publishes node/edge changes to graph.updates so realtime-gateway can relay to portal-web.
+    Stub. In the full architecture, publishes to NATS "graph.updates" for
+    realtime-gateway relay. No-op for hackathon build — see module docstring.
     """
-    try:
-        nc = await nats.connect(os.getenv("NATS_URL", "nats://localhost:4222"))
-        payload = {
-            "tenant_id": tenant_id,
-            "type": update_type,
-            "data": data
-        }
-        await nc.publish("graph.updates", json.dumps(payload).encode())
-        await nc.close()
-    except Exception as e:
-        logger.error(f"Failed to broadcast graph update to NATS: {e}")
+    logger.debug(
+        f"broadcast_graph_update called (no-op): tenant={tenant_id} type={update_type} "
+        "(NATS disabled — ADR-0013)"
+    )

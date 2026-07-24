@@ -1,28 +1,51 @@
-import os
-import json
+"""
+Memory write fast path — ingress handler for tools/call:add_memory.
+
+NATS NOTE: In the full architecture, this function publishes a MemoryWriteJob
+to NATS JetStream ("memory.writes.raw") and returns immediately. The healing-
+worker's NATS consumer then calls cortex_healing.processor.process_memory_write_job.
+
+HACKATHON SIMPLIFICATION (see docs/adr/0013-hackathon-nats-opa-removal.md):
+We call process_memory_write_job directly via asyncio.create_task, removing the
+NATS broker dependency. The processing logic is identical; only the delivery
+mechanism differs.
+"""
+import asyncio
+import logging
 from datetime import datetime
-import nats
 from cortex_schemas.models import ToolCallRequest, ToolCallResponse, MemoryWriteJob, OriginSource
 
-async def handle_add_memory(request: ToolCallRequest, tenant_id: str, agent_id: str) -> ToolCallResponse:
+logger = logging.getLogger(__name__)
+
+
+async def handle_add_memory(
+    request: ToolCallRequest,
+    tenant_id: str,
+    agent_id: str,
+) -> ToolCallResponse:
+    """
+    Accepts a memory write request, constructs a MemoryWriteJob, and dispatches
+    it as a background task. Returns immediately without blocking the response path.
+    """
     raw_text = request.params.get("arguments", {}).get("text", "")
-    
+
     job = MemoryWriteJob(
         tenant_id=tenant_id,
         agent_id=agent_id,
         raw_text=raw_text,
         origin_source=OriginSource.USER_PROMPT,
-        submitted_at=datetime.utcnow()
+        submitted_at=datetime.utcnow(),
     )
-    
+
+    # Import here to avoid a circular import at module load time.
+    # cortex_healing is installed as a local path dependency (see proxy-engine/pyproject.toml).
     try:
-        nc = await nats.connect(os.getenv("NATS_URL", "nats://localhost:4222"))
-        js = nc.jetstream()
-        
-        await js.publish("memory.writes.raw", job.model_dump_json().encode())
-        await nc.close()
-    except Exception as e:
-        # We would log this in a real system, but we must fail gracefully if NATS is down.
-        pass
-    
-    return ToolCallResponse(id=request.id, result={"status": "enqueued"})
+        from cortex_healing.processor import process_memory_write_job
+        asyncio.create_task(process_memory_write_job(job))
+    except ImportError:
+        logger.error(
+            "cortex_healing not importable — memory write job dropped. "
+            "Ensure cortex_healing is installed as a path dependency in proxy-engine/pyproject.toml."
+        )
+
+    return ToolCallResponse(id=request.id, result={"status": "accepted"})
