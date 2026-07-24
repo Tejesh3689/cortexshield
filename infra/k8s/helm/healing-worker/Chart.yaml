@@ -1,0 +1,4 @@
+apiVersion: v2
+name: healing-worker
+description: CortexShield Async Self-Healing Worker
+version: 0.1.0

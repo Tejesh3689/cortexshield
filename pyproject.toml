@@ -1,0 +1,16 @@
+[project]
+name = "cortexshield"
+version = "0.1.0"
+description = "CortexShield Monorepo"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "apps/proxy-engine",
+    "apps/healing-worker",
+    "apps/anomaly-service",
+    "apps/policy-service",
+    "apps/billing-service",
+    "libs/*"
+]

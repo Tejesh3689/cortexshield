@@ -1,0 +1,15 @@
+[project]
+name = "cortex_auth"
+version = "0.1.0"
+description = "Shared JWT and API Key validation middleware"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "PyJWT>=2.8.0",
+    "cryptography>=41.0.0",
+    "asyncpg>=0.28.0",
+    "cortex_schemas",
+    "httpx>=0.24.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.1"
+]

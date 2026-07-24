@@ -1,0 +1,27 @@
+
+replicaCount: 2
+image:
+  repository: cortexshield/policy-service
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 8181
+
+env:
+  SERVICE_NAME: policy-service
+  OPA_BUNDLE_POLL_INTERVAL_SECONDS: "30"
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "256Mi"
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

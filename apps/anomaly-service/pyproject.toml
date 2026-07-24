@@ -1,0 +1,6 @@
+[project]
+name = "anomaly-service"
+version = "0.1.0"
+description = "CortexShield Anomaly Service"
+requires-python = ">=3.12"
+dependencies = []

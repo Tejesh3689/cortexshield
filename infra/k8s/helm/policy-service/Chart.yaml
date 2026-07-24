@@ -1,0 +1,4 @@
+apiVersion: v2
+name: policy-service
+description: CortexShield OPA Policy Server
+version: 0.1.0

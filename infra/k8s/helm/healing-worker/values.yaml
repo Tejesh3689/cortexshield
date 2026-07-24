@@ -1,0 +1,19 @@
+
+replicaCount: 1
+image:
+  repository: cortexshield/healing-worker
+  tag: latest
+
+env:
+  SERVICE_NAME: healing-worker
+  NATS_STREAM_NAME: MEMORY_WRITES
+  NATS_CONSUMER_NAME: healing-worker-consumer
+
+keda:
+  enabled: true
+  minReplicaCount: 1
+  maxReplicaCount: 20
+  natsServerAddress: nats.internal.svc.cluster.local:4222
+  stream: MEMORY_WRITES
+  consumer: healing-worker-consumer
+  lagThreshold: "50"

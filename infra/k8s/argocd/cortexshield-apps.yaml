@@ -1,0 +1,19 @@
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cortexshield-dev-cluster
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cortexshield/cortexshield.git'
+    path: infra/k8s/argocd/apps
+    targetRevision: HEAD
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

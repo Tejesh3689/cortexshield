@@ -1,0 +1,22 @@
+
+replicaCount: 1
+image:
+  repository: cortexshield/anomaly-service
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 8100
+
+env:
+  SERVICE_NAME: anomaly-service
+  MODEL_RETRAIN_INTERVAL_MINUTES: "60"
+
+keda:
+  enabled: true
+  minReplicaCount: 1
+  maxReplicaCount: 15
+  natsServerAddress: nats.internal.svc.cluster.local:4222
+  stream: ANOMALY_SCORING
+  consumer: anomaly-worker-consumer
+  lagThreshold: "100"

@@ -1,0 +1,11 @@
+[project]
+name = "billing_service"
+version = "0.1.0"
+description = "Billing & Stripe Integration Service"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "stripe>=6.0.0",
+    "cortex_db"
+]

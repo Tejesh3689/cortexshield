@@ -1,0 +1,4 @@
+apiVersion: v2
+name: anomaly-service
+description: CortexShield ML Anomaly Engine
+version: 0.1.0

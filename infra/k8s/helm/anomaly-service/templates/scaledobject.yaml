@@ -1,0 +1,19 @@
+
+{{- if .Values.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-anomaly-service-scaler
+spec:
+  scaleTargetRef:
+    name: {{ .Release.Name }}-anomaly-service
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+  triggers:
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: "{{ .Values.keda.natsServerAddress }}"
+        stream: "{{ .Values.keda.stream }}"
+        consumer: "{{ .Values.keda.consumer }}"
+        lagThreshold: "{{ .Values.keda.lagThreshold }}"
+{{- end }}

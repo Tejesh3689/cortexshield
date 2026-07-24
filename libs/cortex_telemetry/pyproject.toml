@@ -1,0 +1,13 @@
+[project]
+name = "cortex_telemetry"
+version = "0.1.0"
+description = "OpenTelemetry configuration for CortexShield"
+requires-python = ">=3.10"
+dependencies = [
+    "opentelemetry-api",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-fastapi",
+    "opentelemetry-instrumentation-asyncpg",
+    "opentelemetry-instrumentation-httpx"
+]

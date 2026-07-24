@@ -1,0 +1,22 @@
+{
+  "name": "@cortexshield/proxy-mcp",
+  "version": "0.1.0",
+  "description": "MCP proxy client for routing agent traffic through CortexShield",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "cortex-mcp": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@cortexshield/shared-types": "workspace:*"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["mcp", "ai", "proxy", "security"]
+}

@@ -1,0 +1,18 @@
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: healing-worker-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/cortexshield/cortexshield.git'
+    path: infra/k8s/helm/healing-worker
+    targetRevision: HEAD
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: cortexshield-dev

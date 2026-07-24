@@ -1,0 +1,11 @@
+services:
+  policy-service:
+    url: http://policy-service:8000
+    
+bundles:
+  cortexshield:
+    service: policy-service
+    resource: bundles/bundle.tar.gz
+    polling:
+      min_delay_seconds: 2
+      max_delay_seconds: 5

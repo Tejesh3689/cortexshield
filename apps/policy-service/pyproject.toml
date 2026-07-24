@@ -1,0 +1,6 @@
+[project]
+name = "policy-service"
+version = "0.1.0"
+description = "CortexShield Policy Service"
+requires-python = ">=3.12"
+dependencies = []

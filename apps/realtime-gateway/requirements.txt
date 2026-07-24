@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+websockets
+nats-py
+pyjwt
+httpx
