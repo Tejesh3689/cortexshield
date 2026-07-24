@@ -1,5 +1,6 @@
 node_modules/
 .env
+.env.local
 dist/
 __pycache__/
 *.pyc
@@ -7,3 +8,5 @@ __pycache__/
 .coverage
 htmlcov/
 .DS_Store
+.next/
+package-lock.json
