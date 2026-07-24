@@ -15,11 +15,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={inter.className}>{children}</body>
-      </html>
-    </ClerkProvider>
+  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const isClerkConfigured = Boolean(key && key.startsWith('pk_test_') && key.length > 30);
+
+  const bodyContent = (
+    <html lang="en">
+      <body className={inter.className}>{children}</body>
+    </html>
   );
+
+  if (isClerkConfigured) {
+    return <ClerkProvider>{bodyContent}</ClerkProvider>;
+  }
+
+  return bodyContent;
 }

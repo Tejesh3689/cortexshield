@@ -16,6 +16,7 @@
     "pg": "^8.12.0",
     "react": "^18",
     "react-dom": "^18",
+    "react-force-graph-2d": "^1.29.1",
     "react-force-graph-3d": "^1.29.1",
     "tailwind-merge": "^2.4.0",
     "three": "^0.166.1"
