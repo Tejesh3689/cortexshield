@@ -2,5 +2,5 @@ packages:
   - "apps/portal-web"
   - "packages/*"
 allowBuilds:
-  '@clerk/shared': set this to true or false
-  unrs-resolver: set this to true or false
+  '@clerk/shared': true
+  unrs-resolver: true
