@@ -247,13 +247,18 @@ export default function MemoryGraphView() {
 
   useEffect(() => {
     setIsMounted(true);
+    const timer = setTimeout(() => {
+      if (fgRef.current) {
+        fgRef.current.zoomToFit(800, 60);
+      }
+    }, 600);
 
     // Connect to realtime-gateway WebSocket.
     // URL must be provided via NEXT_PUBLIC_WS_URL — no localhost fallback (ADR-0013).
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
     if (!wsUrl) {
       console.warn("NEXT_PUBLIC_WS_URL is not set — realtime graph updates disabled.");
-      return;
+      return () => clearTimeout(timer);
     }
 
     const ws = new WebSocket(wsUrl);
@@ -275,9 +280,69 @@ export default function MemoryGraphView() {
     wsRef.current = ws;
 
     return () => {
+      clearTimeout(timer);
       ws.close();
     };
   }, []);
+
+  const filteredNodes = useMemo(() => {
+    return graphData.nodes.filter((node) => {
+      if (selectedType !== "ALL" && node.type !== selectedType) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          node.label.toLowerCase().includes(q) ||
+          node.memoryHash.toLowerCase().includes(q) ||
+          node.content.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [graphData.nodes, selectedType, searchQuery]);
+
+  const filteredLinks = useMemo(() => {
+    const validNodeIds = new Set(filteredNodes.map((n) => n.id));
+    return graphData.links.filter((l) => {
+      const srcId = typeof l.source === "object" ? (l.source as any).id : l.source;
+      const tgtId = typeof l.target === "object" ? (l.target as any).id : l.target;
+      return validNodeIds.has(srcId) && validNodeIds.has(tgtId);
+    });
+  }, [graphData.links, filteredNodes]);
+
+  const handleNodeClick = useCallback((node: any) => {
+    setSelectedNode(node as MemoryNode);
+    if (fgRef.current) {
+      fgRef.current.centerAt(node.x, node.y, 800);
+      fgRef.current.zoom(2.2, 800);
+    }
+  }, []);
+
+  const handlePruneNode = () => {
+    if (!selectedNode) return;
+    setGraphData((prev) => {
+      const newNodes = prev.nodes.filter((n) => n.id !== selectedNode.id);
+      const newLinks = prev.links.filter((l) => {
+        const srcId = typeof l.source === "object" ? (l.source as any).id : l.source;
+        const tgtId = typeof l.target === "object" ? (l.target as any).id : l.target;
+        return srcId !== selectedNode.id && tgtId !== selectedNode.id;
+      });
+      return { nodes: newNodes, links: newLinks };
+    });
+    const remaining = graphData.nodes.filter((n) => n.id !== selectedNode.id);
+    if (remaining.length > 0) setSelectedNode(remaining[0]);
+  };
+
+  const handlePromoteToLongTerm = () => {
+    if (!selectedNode) return;
+    const updated: MemoryNode = {
+      ...selectedNode,
+      type: "LONG_TERM",
+      color: "#737ccf",
+      retentionPolicy: "Permanent Knowledge Store",
+      decayFactor: 0.99,
+    };
+    handleUpdateNode(updated);
+  };
 
   const handleUpdateNode = (updated: MemoryNode) => {
     setGraphData((prev) => ({
@@ -286,45 +351,6 @@ export default function MemoryGraphView() {
     }));
     setSelectedNode(updated);
   };
-
-  const filteredNodes = useMemo(() => {
-    return graphData.nodes.filter((node) => {
-      const matchesSearch = node.label.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            node.memoryHash.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType = selectedType === "ALL" || node.type === selectedType;
-      return matchesSearch && matchesType;
-    });
-  }, [graphData.nodes, searchQuery, selectedType]);
-
-  const filteredLinks = useMemo(() => {
-    const nodeIds = new Set(filteredNodes.map(n => n.id));
-    return graphData.links.filter(link => 
-      nodeIds.has(typeof link.source === 'object' ? (link.source as any).id : link.source) && 
-      nodeIds.has(typeof link.target === 'object' ? (link.target as any).id : link.target)
-    );
-  }, [graphData.links, filteredNodes]);
-
-  const handleNodeClick = useCallback((node: any) => {
-    setSelectedNode(node);
-  }, []);
-
-  const handlePromoteToLongTerm = useCallback(() => {
-    if (!selectedNode) return;
-    const updated = { ...selectedNode, type: "LONG_TERM" as const, color: "#737ccf" };
-    handleUpdateNode(updated);
-  }, [selectedNode]);
-
-  const handlePruneNode = useCallback(() => {
-    if (!selectedNode) return;
-    setGraphData(prev => ({
-      nodes: prev.nodes.filter(n => n.id !== selectedNode.id),
-      links: prev.links.filter(l => 
-        (typeof l.source === 'object' ? (l.source as any).id : l.source) !== selectedNode.id && 
-        (typeof l.target === 'object' ? (l.target as any).id : l.target) !== selectedNode.id
-      )
-    }));
-    setSelectedNode(null as any);
-  }, [selectedNode]);
 
   const handleResetView = () => {
     if (fgRef.current) {

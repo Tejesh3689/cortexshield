@@ -7,6 +7,12 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const isClerkConfigured = Boolean(
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.startsWith("pk_test_") &&
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.length > 30
+  );
+
   return (
     <div className="flex h-screen bg-slate-950">
       <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
@@ -30,7 +36,19 @@ export default function DashboardLayout({
           </Link>
         </nav>
         <div className="p-4 border-t border-slate-800">
-          <UserButton showName />
+          {isClerkConfigured ? (
+            <UserButton showName />
+          ) : (
+            <div className="flex items-center gap-3 px-2 py-1">
+              <div className="w-8 h-8 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center font-semibold text-blue-400 text-xs">
+                AD
+              </div>
+              <div className="flex flex-col text-xs">
+                <span className="font-medium text-slate-200">Admin User</span>
+                <span className="text-slate-500">Local Dev</span>
+              </div>
+            </div>
+          )}
         </div>
       </aside>
       <main className="flex-1 overflow-auto bg-slate-950">

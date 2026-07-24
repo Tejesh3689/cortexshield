@@ -1,0 +1,10 @@
+[project]
+name = "cortex_security_rules"
+version = "0.1.0"
+description = "CortexShield security rules"
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
