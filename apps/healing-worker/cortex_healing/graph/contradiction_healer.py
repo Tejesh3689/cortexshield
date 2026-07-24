@@ -39,4 +39,18 @@ async def heal_graph(tenant_id: str, triplets: List[Triplet], trust_score: float
     # Note: APOC procedure syntax requires CALL. 
     
     with driver.session() as session:
-        session.run(query, tenant_id=tenant_id, triplets=[t.model_dump() for t in triplets], status=status.value, trust_score=trust_score)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Received triplets: {triplets}")
+        params = {
+            "tenant_id": tenant_id,
+            "triplets": [t.model_dump() for t in triplets],
+            "status": status.value,
+            "trust_score": trust_score
+        }
+        logger.info(f"Executing Cypher query: {query}")
+        logger.info(f"With parameters: {params}")
+        
+        result = session.run(query, **params)
+        summary = result.consume()
+        logger.info(f"Neo4j write summary: Nodes created: {summary.counters.nodes_created}, Relationships created: {summary.counters.relationships_created}, Properties set: {summary.counters.properties_set}")
