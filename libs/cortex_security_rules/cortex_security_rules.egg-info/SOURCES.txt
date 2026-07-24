@@ -1,0 +1,7 @@
+pyproject.toml
+cortex_security_rules/__init__.py
+cortex_security_rules/poison.py
+cortex_security_rules.egg-info/PKG-INFO
+cortex_security_rules.egg-info/SOURCES.txt
+cortex_security_rules.egg-info/dependency_links.txt
+cortex_security_rules.egg-info/top_level.txt

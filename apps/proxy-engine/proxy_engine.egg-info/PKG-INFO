@@ -3,5 +3,12 @@ Name: proxy-engine
 Version: 0.1.0
 Summary: CortexShield Proxy Engine
 Requires-Python: >=3.12
-Requires-Dist: healing-worker
+Requires-Dist: cortex_healing
 Requires-Dist: cortex_schemas
+Requires-Dist: cortex_security_rules
+Requires-Dist: fastapi>=0.111.0
+Requires-Dist: uvicorn>=0.30.1
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: prometheus-client>=0.25.0
+Requires-Dist: redis>=8.0.1

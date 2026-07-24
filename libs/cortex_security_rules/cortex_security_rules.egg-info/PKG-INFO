@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: cortex_security_rules
+Version: 0.1.0
+Summary: CortexShield Security Rules
+Requires-Python: >=3.12

@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: cortex_healing
+Version: 0.1.0
+Summary: CortexShield Healing Worker
+Requires-Python: >=3.12
