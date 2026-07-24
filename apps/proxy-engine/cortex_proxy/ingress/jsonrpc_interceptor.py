@@ -13,16 +13,18 @@ async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> 
     req = ToolCallRequest(**request_data)
     tool_name = req.params.get("name", "unknown")
     
-    if req.method == "tools/call" and tool_name == "add_memory":
-        response = await handle_add_memory(req, tenant_id, agent_id)
-        # Note: add_memory is internal, but we can sanitize its egress anyway
-        safe_response = await sanitize_tool_response(response, tenant_id, agent_id, tool_name)
-        return safe_response.model_dump(exclude_none=True)
-    
     if req.method == "tools/call":
-        decision = await decide(req, tenant_id, agent_id)
+        from ..db import async_session_maker
+        async with async_session_maker() as session:
+            decision = await decide(req, tenant_id, agent_id, session=session)
+
         if decision.decision.value == "DENY":
             return ToolCallResponse(id=req.id, error={"code": -32000, "message": f"Denied: {decision.reason}"}).model_dump(exclude_none=True)
+            
+        if tool_name == "add_memory":
+            response = await handle_add_memory(req, tenant_id, agent_id)
+            safe_response = await sanitize_tool_response(response, tenant_id, agent_id, tool_name)
+            return safe_response.model_dump(exclude_none=True)
             
         # Execute tool and intercept response
         raw_response = await execute_tool(req)

@@ -6,6 +6,8 @@ Requires-Python: >=3.12
 Requires-Dist: cortex_healing
 Requires-Dist: cortex_schemas
 Requires-Dist: cortex_security_rules
+Requires-Dist: cortex_db
+Requires-Dist: asyncpg>=0.28.0
 Requires-Dist: fastapi>=0.111.0
 Requires-Dist: uvicorn>=0.30.1
 Requires-Dist: python-dotenv>=1.0.0

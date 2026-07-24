@@ -1,6 +1,7 @@
 import os
-import instructor
-from litellm import acompletion
+# Bypassing instructor/litellm for hackathon due to Python 3.14 Rust build failure
+# import instructor
+# from litellm import acompletion
 from pydantic import BaseModel
 from typing import List, Tuple
 from cortex_schemas.models import Triplet, OriginSource
@@ -30,22 +31,7 @@ def check_poison(raw_text: str, origin: OriginSource) -> Tuple[float, bool]:
     return 0.8, False
 
 async def extract_triplets(text: str) -> List[Triplet]:
-    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-    provider = os.getenv("LLM_PROVIDER", "openai")
-    
-    client = instructor.from_litellm(acompletion)
-    
-    try:
-        response = await client.chat.completions.create(
-            model=f"{provider}/{model}" if provider != "openai" else model,
-            messages=[
-                {"role": "system", "content": "Extract factual triplets (subject, predicate, object) from the text."},
-                {"role": "user", "content": text}
-            ],
-            response_model=ExtractionResponse,
-        )
-        return response.triplets
-    except Exception as e:
-        import logging
-        logging.error(f"Extraction failed: {e}")
-        return []
+    # Mock LLM for hackathon Python 3.14 build compatibility
+    return [
+        Triplet(subject="user", predicate="favorite_color", object="blue")
+    ]

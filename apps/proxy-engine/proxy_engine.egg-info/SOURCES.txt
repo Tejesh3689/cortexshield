@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 cortex_proxy/config.py
+cortex_proxy/db.py
 cortex_proxy/main.py
 cortex_proxy/cache/trust_score_cache.py
 cortex_proxy/egress/response_sanitizer.py

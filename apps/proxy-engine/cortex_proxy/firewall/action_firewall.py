@@ -64,7 +64,10 @@ async def get_sequence_score(tenant_id: str, agent_id: str, tool_name: str) -> f
         return 0.0
 
 
-async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str) -> FirewallDecision:
+from sqlalchemy.ext.asyncio import AsyncSession
+from cortex_db.hash_chain import append_audit_log
+
+async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str, session: AsyncSession = None) -> FirewallDecision:
     """
     Evaluate a tool call request and return a FirewallDecision.
 
@@ -110,5 +113,13 @@ async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str) -> Fir
 
     # HACKATHON: Audit log publish via NATS is omitted. A direct Postgres insert
     # is the intended replacement — see docs/adr/0013-hackathon-nats-opa-removal.md.
+    if session:
+        await append_audit_log(
+            session=session,
+            tenant_id=tenant_id,
+            event_type="firewall_decision",
+            event_ref=f"decision_{hashlib.md5((agent_id + tool_name + str(datetime.utcnow())).encode()).hexdigest()}",
+            payload=decision.model_dump(mode="json")
+        )
 
     return decision

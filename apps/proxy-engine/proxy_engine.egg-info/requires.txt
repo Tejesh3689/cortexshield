@@ -1,6 +1,8 @@
 cortex_healing
 cortex_schemas
 cortex_security_rules
+cortex_db
+asyncpg>=0.28.0
 fastapi>=0.111.0
 uvicorn>=0.30.1
 python-dotenv>=1.0.0

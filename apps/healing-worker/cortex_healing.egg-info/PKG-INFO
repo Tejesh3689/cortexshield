@@ -3,3 +3,7 @@ Name: cortex_healing
 Version: 0.1.0
 Summary: CortexShield Healing Worker
 Requires-Python: >=3.12
+Requires-Dist: cortex_schemas
+Requires-Dist: cortex_neo4j_client
+Requires-Dist: networkx
+Requires-Dist: qdrant-client

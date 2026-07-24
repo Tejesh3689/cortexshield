@@ -41,7 +41,15 @@ async def handle_add_memory(
     # cortex_healing is installed as a local path dependency (see proxy-engine/pyproject.toml).
     try:
         from cortex_healing.processor import process_memory_write_job
-        asyncio.create_task(process_memory_write_job(job))
+        
+        async def run_and_log_memory_job(j: MemoryWriteJob):
+            try:
+                await process_memory_write_job(j)
+                logger.info(f"Successfully processed memory write job for tenant {j.tenant_id}")
+            except Exception as e:
+                logger.error(f"BACKGROUND TASK FAILED: process_memory_write_job raised an exception: {e}", exc_info=True)
+                
+        asyncio.create_task(run_and_log_memory_job(job))
     except ImportError:
         logger.error(
             "cortex_healing not importable — memory write job dropped. "

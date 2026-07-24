@@ -11,6 +11,8 @@ dependencies = [
     "cortex_healing",
     "cortex_schemas",
     "cortex_security_rules",
+    "cortex_db",
+    "asyncpg>=0.28.0",
     "fastapi>=0.111.0",
     "uvicorn>=0.30.1",
     "python-dotenv>=1.0.0",
@@ -27,3 +29,4 @@ build-backend = "setuptools.build_meta"
 cortex_healing = { workspace = true }
 cortex_schemas = { workspace = true }
 cortex_security_rules = { workspace = true }
+cortex_db = { workspace = true }

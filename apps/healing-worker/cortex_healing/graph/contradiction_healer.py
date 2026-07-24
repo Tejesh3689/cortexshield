@@ -18,9 +18,11 @@ async def heal_graph(tenant_id: str, triplets: List[Triplet], trust_score: float
     
     // Supersede old active edges of the same predicate for this subject
     WITH s, o, t
-    MATCH (s)-[old_r]->(other_o)
+    OPTIONAL MATCH (s)-[old_r]->(other_o)
     WHERE type(old_r) = t.predicate AND old_r.status = 'ACTIVE' AND id(other_o) <> id(o)
-    SET old_r.status = 'SUPERSEDED', old_r.superseded_at = datetime()
+    FOREACH (_ IN CASE WHEN old_r IS NOT NULL THEN [1] ELSE [] END |
+        SET old_r.status = 'SUPERSEDED', old_r.superseded_at = datetime()
+    )
     
     // Create new edge
     WITH s, o, t

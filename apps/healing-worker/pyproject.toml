@@ -3,4 +3,13 @@ name = "cortex_healing"
 version = "0.1.0"
 description = "CortexShield Healing Worker"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "cortex_schemas",
+    "cortex_neo4j_client",
+    "networkx",
+    "qdrant-client"
+]
+
+[tool.uv.sources]
+cortex_schemas = { workspace = true }
+cortex_neo4j_client = { workspace = true }

@@ -5,6 +5,7 @@ cortex_healing/processor.py
 cortex_healing.egg-info/PKG-INFO
 cortex_healing.egg-info/SOURCES.txt
 cortex_healing.egg-info/dependency_links.txt
+cortex_healing.egg-info/requires.txt
 cortex_healing.egg-info/top_level.txt
 cortex_healing/extraction/entity_resolution.py
 cortex_healing/extraction/llm_triplet_extractor.py
