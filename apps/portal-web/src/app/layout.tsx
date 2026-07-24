@@ -10,23 +10,20 @@ export const metadata: Metadata = {
   description: "AI Firewall & Graph Visualization",
 };
 
+const DUMMY_CLERK_KEY = "pk_test_Y29ydGV4c2hpZWxkLWRldmVsb3BtZW50LXBsYWNlaG9sZGVyLWtleSQ";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const isClerkConfigured = Boolean(key && key.startsWith('pk_test_') && key.length > 30);
+  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || DUMMY_CLERK_KEY;
 
-  const bodyContent = (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
-    </html>
+  return (
+    <ClerkProvider publishableKey={key}>
+      <html lang="en">
+        <body className={inter.className}>{children}</body>
+      </html>
+    </ClerkProvider>
   );
-
-  if (isClerkConfigured) {
-    return <ClerkProvider>{bodyContent}</ClerkProvider>;
-  }
-
-  return bodyContent;
 }

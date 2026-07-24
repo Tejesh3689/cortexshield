@@ -10,3 +10,6 @@ htmlcov/
 .DS_Store
 .next/
 package-lock.json
+*.egg-info/
+.venv/
+

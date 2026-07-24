@@ -1,3 +1,4 @@
+import { NextResponse, NextRequest } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Define routes that require authentication
@@ -5,13 +6,21 @@ const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
 ]);
 
-export default clerkMiddleware((auth, req) => {
-  console.log("Middleware executed for:", req.url);
+const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const isClerkConfigured = Boolean(key && key.startsWith('pk_test_') && key.length > 30);
+
+const clerkHandler = clerkMiddleware((auth, req) => {
   if (isProtectedRoute(req)) {
-    console.log("Protecting route:", req.url);
     auth().protect();
   }
 });
+
+export default function middleware(req: NextRequest, event: any) {
+  if (!isClerkConfigured) {
+    return NextResponse.next();
+  }
+  return clerkHandler(req, event);
+}
 
 export const config = {
   matcher: [

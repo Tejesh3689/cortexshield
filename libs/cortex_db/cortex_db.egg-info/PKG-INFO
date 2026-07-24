@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: cortex_db
-Version: 0.1.0
-Summary: CortexShield Database Models and Migrations
-Requires-Python: >=3.12
-Requires-Dist: sqlalchemy>=2.0
-Requires-Dist: alembic>=1.13
-Requires-Dist: psycopg2-binary>=2.9.9
-Requires-Dist: python-dotenv>=1.0.0
