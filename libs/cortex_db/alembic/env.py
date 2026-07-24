@@ -1,9 +1,15 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
+# Load .env from the repository root (3 directories up from this file)
+root_dir = Path(__file__).resolve().parent.parent.parent.parent
+load_dotenv(root_dir / ".env", override=True)
+
 config = context.config
-config.set_main_option("sqlalchemy.url", os.environ.get("DATABASE_URL", "postgresql://user:pass@localhost/db"))
+config.set_main_option("sqlalchemy.url", os.environ.get("DATABASE_URL"))
 
 def run_migrations_online():
     connectable = engine_from_config(
