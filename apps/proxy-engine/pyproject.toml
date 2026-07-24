@@ -8,10 +8,14 @@ dependencies = [
     # process_memory_write_job() directly (hackathon in-process mode).
     # In the full NATS architecture, healing-worker is a separate process and
     # this dependency is removed — see docs/adr/0013-hackathon-nats-opa-removal.md.
-    "cortex-healing @ file://../healing-worker",
-    "cortex-schemas @ file://../../../libs/cortex_schemas",
+    "healing-worker",
+    "cortex_schemas",
 ]
 
 [build-system]
 requires = ["setuptools"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
+
+[tool.uv.sources]
+healing-worker = { workspace = true }
+cortex_schemas = { workspace = true }

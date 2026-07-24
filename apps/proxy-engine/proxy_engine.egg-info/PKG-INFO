@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: proxy-engine
+Version: 0.1.0
+Summary: CortexShield Proxy Engine
+Requires-Python: >=3.12
+Requires-Dist: healing-worker
+Requires-Dist: cortex_schemas
