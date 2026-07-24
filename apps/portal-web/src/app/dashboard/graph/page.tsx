@@ -41,8 +41,8 @@ export interface MemoryNode {
 }
 
 export interface MemoryLink {
-  source: string;
-  target: string;
+  source: string | MemoryNode | any;
+  target: string | MemoryNode | any;
 }
 
 // Memory Nodes seed dataset matching the user's provided diagram (Teal #5cd3c1 & Purple #737ccf)
@@ -243,6 +243,7 @@ export default function MemoryGraphView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fgRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -285,6 +286,45 @@ export default function MemoryGraphView() {
     }));
     setSelectedNode(updated);
   };
+
+  const filteredNodes = useMemo(() => {
+    return graphData.nodes.filter((node) => {
+      const matchesSearch = node.label.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            node.memoryHash.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = selectedType === "ALL" || node.type === selectedType;
+      return matchesSearch && matchesType;
+    });
+  }, [graphData.nodes, searchQuery, selectedType]);
+
+  const filteredLinks = useMemo(() => {
+    const nodeIds = new Set(filteredNodes.map(n => n.id));
+    return graphData.links.filter(link => 
+      nodeIds.has(typeof link.source === 'object' ? (link.source as any).id : link.source) && 
+      nodeIds.has(typeof link.target === 'object' ? (link.target as any).id : link.target)
+    );
+  }, [graphData.links, filteredNodes]);
+
+  const handleNodeClick = useCallback((node: any) => {
+    setSelectedNode(node);
+  }, []);
+
+  const handlePromoteToLongTerm = useCallback(() => {
+    if (!selectedNode) return;
+    const updated = { ...selectedNode, type: "LONG_TERM" as const, color: "#737ccf" };
+    handleUpdateNode(updated);
+  }, [selectedNode]);
+
+  const handlePruneNode = useCallback(() => {
+    if (!selectedNode) return;
+    setGraphData(prev => ({
+      nodes: prev.nodes.filter(n => n.id !== selectedNode.id),
+      links: prev.links.filter(l => 
+        (typeof l.source === 'object' ? (l.source as any).id : l.source) !== selectedNode.id && 
+        (typeof l.target === 'object' ? (l.target as any).id : l.target) !== selectedNode.id
+      )
+    }));
+    setSelectedNode(null as any);
+  }, [selectedNode]);
 
   const handleResetView = () => {
     if (fgRef.current) {
@@ -441,9 +481,8 @@ export default function MemoryGraphView() {
               ctx.fill();
             }}
             onNodeClick={handleNodeClick}
-            linkColor={() => "#cbd5e1"}
+            linkColor={() => "rgba(203, 213, 225, 0.6)"}
             linkWidth={2}
-            linkOpacity={0.6}
             backgroundColor="#0b0f19"
           />
         )}
