@@ -79,7 +79,7 @@ async def seed_neo4j():
     
     tenant_id = "tenant_pro_1"
     
-    async with driver.session(database="neo4j") as session:
+    async with driver.session() as session:
         # Clear existing dev data for this tenant
         await session.run("MATCH (n {tenant_id: $t}) DETACH DELETE n", t=tenant_id)
         
