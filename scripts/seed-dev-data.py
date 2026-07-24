@@ -1,9 +1,24 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "asyncpg>=0.28.0",
+#     "neo4j>=5.14.0",
+#     "python-dotenv>=1.0.0",
+# ]
+# ///
 import os
 import asyncio
 import hashlib
 import secrets
+from pathlib import Path
+
 import asyncpg
 from neo4j import AsyncGraphDatabase
+from dotenv import load_dotenv
+
+# Load .env from the repository root
+root_dir = Path(__file__).resolve().parent.parent
+load_dotenv(root_dir / ".env", override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://cortex:localdevpassword@localhost:5432/cortexshield")
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -64,7 +79,7 @@ async def seed_neo4j():
     
     tenant_id = "tenant_pro_1"
     
-    async with driver.session(database="neo4j") as session:
+    async with driver.session() as session:
         # Clear existing dev data for this tenant
         await session.run("MATCH (n {tenant_id: $t}) DETACH DELETE n", t=tenant_id)
         

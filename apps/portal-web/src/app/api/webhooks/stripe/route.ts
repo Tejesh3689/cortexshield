@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       const stripeCustomerId = subscription.customer;
       const status = subscription.status; // 'active', 'trialing', etc
       
-      # Simplified mapping logic for tier from plan ID
+      // Simplified mapping logic for tier from plan ID
       let tier = "growth";
       let provisioningStatus = "ACTIVE";
       

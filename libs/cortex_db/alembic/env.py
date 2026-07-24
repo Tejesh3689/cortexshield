@@ -1,12 +1,18 @@
 import os
 import sys
+from pathlib import Path
 from logging.config import fileConfig
-
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
+# Load .env from repository root
+root_dir = Path(__file__).resolve().parent.parent.parent.parent
+load_dotenv(root_dir / ".env", override=True)
+load_dotenv(root_dir / ".env.local", override=True)
+
 # Add workspace libs to path so cortex_db.models can be imported
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cortex_db.models import Base
 
@@ -19,30 +25,6 @@ if config.config_file_name:
         pass
 
 target_metadata = Base.metadata
-
-def load_env_file():
-    # Attempt to load .env from workspace root or current directory if DATABASE_URL not set
-    if "DATABASE_URL" not in os.environ:
-        candidates = [
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".env")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env.local")),
-        ]
-        for candidate in candidates:
-            if os.path.exists(candidate):
-                with open(candidate, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#") and "=" in line:
-                            k, v = line.split("=", 1)
-                            k = k.strip()
-                            v = v.strip()
-                            if "#" in v:
-                                v = v.split("#", 1)[0].strip()
-                            os.environ.setdefault(k, v)
-                break
-
-load_env_file()
 
 def get_url():
     return os.getenv(
