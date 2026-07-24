@@ -13,7 +13,10 @@ import {
   Activity,
   Zap,
   Sliders,
-  CheckCircle2
+  CheckCircle2,
+  X,
+  PanelRightOpen,
+  PanelRightClose
 } from "lucide-react";
 
 // Dynamically import 2D Force Graph to ensure zero SSR/WebGL bundle export issues
@@ -51,7 +54,7 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     id: "mem_central_core",
     label: "Central Memory Hub",
     type: "SHORT_TERM",
-    color: "#5cd3c1", // Soft Teal / Turquoise from user's image
+    color: "#5cd3c1",
     val: 16,
     memoryHash: "0x8F4B-99A1-CORE",
     vectorDimension: "1536 (text-embedding-3-large)",
@@ -63,8 +66,6 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     timestamp: "2026-07-24 15:20:00",
     content: "Central neural memory hub routing short-term conversational context and long-term entity associations.",
   },
-
-  // Short-Term Memory Nodes (Teal #5cd3c1)
   {
     id: "mem_short_01",
     label: "Prompt Context: Session #1042",
@@ -129,13 +130,11 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     timestamp: "2026-07-24 15:12:00",
     content: "Semantic cluster representing user query intent for 2D/3D memory graph inspection dashboard.",
   },
-
-  // Long-Term Memory Nodes (Purple #737ccf from user's image)
   {
     id: "mem_long_01",
     label: "User Preferences & Profile",
     type: "LONG_TERM",
-    color: "#737ccf", // Soft Purple from user's diagram
+    color: "#737ccf",
     val: 13,
     memoryHash: "0x8A88-33E1-LT01",
     vectorDimension: "1536 (BGE-large-en-v1.5)",
@@ -195,8 +194,6 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     timestamp: "2026-07-23 11:45:00",
     content: "Encrypted API references for subscription usage tracking and billing aggregation.",
   },
-
-  // Poisoned Fragment Node
   {
     id: "mem_poisoned_01",
     label: "Untrusted Injection Fragment",
@@ -239,7 +236,8 @@ export default function MemoryGraphView() {
     nodes: SEED_MEMORY_NODES,
     links: SEED_MEMORY_LINKS,
   });
-  const [selectedNode, setSelectedNode] = useState<MemoryNode>(SEED_MEMORY_NODES[0]);
+  const [selectedNode, setSelectedNode] = useState<MemoryNode | null>(SEED_MEMORY_NODES[0]);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fgRef = useRef<any>(null);
@@ -248,8 +246,6 @@ export default function MemoryGraphView() {
   useEffect(() => {
     setIsMounted(true);
 
-    // Connect to realtime-gateway WebSocket.
-    // URL must be provided via NEXT_PUBLIC_WS_URL — no localhost fallback (ADR-0013).
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
     if (!wsUrl) {
       console.warn("NEXT_PUBLIC_WS_URL is not set — realtime graph updates disabled.");
@@ -282,7 +278,7 @@ export default function MemoryGraphView() {
   const handleUpdateNode = (updated: MemoryNode) => {
     setGraphData((prev) => ({
       ...prev,
-      nodes: prev.nodes.map((n) => (n.id === selectedNode.id ? updated : n)),
+      nodes: prev.nodes.map((n) => (n.id === updated.id ? updated : n)),
     }));
     setSelectedNode(updated);
   };
@@ -306,6 +302,10 @@ export default function MemoryGraphView() {
 
   const handleNodeClick = useCallback((node: any) => {
     setSelectedNode(node);
+    setIsDrawerOpen(true);
+    if (fgRef.current && node.x !== undefined && node.y !== undefined) {
+      fgRef.current.centerAt(node.x, node.y, 600);
+    }
   }, []);
 
   const handlePromoteToLongTerm = useCallback(() => {
@@ -323,7 +323,7 @@ export default function MemoryGraphView() {
         (typeof l.target === 'object' ? (l.target as any).id : l.target) !== selectedNode.id
       )
     }));
-    setSelectedNode(null as any);
+    setSelectedNode(null);
   }, [selectedNode]);
 
   const handleResetView = () => {
@@ -337,20 +337,20 @@ export default function MemoryGraphView() {
     setTimeout(() => setIsRefreshing(false), 1200);
   };
 
-  // Custom node canvas drawing matching the clean colored circles from user's diagram
+  // Custom node canvas drawing matching clean colored circles (Teal #5cd3c1 & Purple #737ccf)
   const drawNodeCanvas = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const isSelected = selectedNode && selectedNode.id === node.id;
     const radius = node.val ? node.val : 12;
 
-    // Draw Outer Glow if selected
+    // Outer Glow if selected
     if (isSelected) {
       ctx.beginPath();
-      ctx.arc(node.x, node.y, radius + 5, 0, 2 * Math.PI, false);
-      ctx.fillStyle = "rgba(92, 211, 193, 0.35)";
+      ctx.arc(node.x, node.y, radius + 6, 0, 2 * Math.PI, false);
+      ctx.fillStyle = "rgba(92, 211, 193, 0.4)";
       ctx.fill();
     }
 
-    // Draw Circle Node (Teal #5cd3c1 or Purple #737ccf)
+    // Node Circle
     ctx.beginPath();
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
     ctx.fillStyle = node.color || "#5cd3c1";
@@ -361,8 +361,8 @@ export default function MemoryGraphView() {
     ctx.strokeStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.4)";
     ctx.stroke();
 
-    // Node Label text below circle
-    if (globalScale > 0.9) {
+    // Node Label
+    if (globalScale > 0.85) {
       const label = node.label;
       const fontSize = 11 / globalScale;
       ctx.font = `${fontSize}px sans-serif`;
@@ -376,7 +376,7 @@ export default function MemoryGraphView() {
   return (
     <div className="relative w-full h-[calc(100vh-1px)] bg-[#0b0f19] text-slate-100 font-sans overflow-hidden select-none">
       {/* Top Header Navigation & Filter Bar */}
-      <header className="absolute top-0 left-0 right-0 z-20 bg-[#0e1424]/90 backdrop-blur-md border-b border-[#1b273d] px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+      <header className="absolute top-0 left-0 right-0 z-20 bg-[#0e1424]/95 backdrop-blur-md border-b border-[#1b273d] px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
         {/* Left: Memory Graph Title & Search */}
         <div className="flex items-center gap-4 w-full md:w-auto">
           <div className="flex items-center gap-2 text-[#5cd3c1] font-mono font-black text-lg">
@@ -397,7 +397,7 @@ export default function MemoryGraphView() {
         </div>
 
         {/* Center: Memory Node Category Filter Buttons */}
-        <div className="flex items-center gap-1.5 bg-[#131b2e] p-1 rounded-lg border border-[#202e48]">
+        <div className="flex items-center gap-1 bg-[#131b2e] p-1 rounded-xl border border-[#202e48]">
           {[
             { id: "ALL", label: "All Memory Nodes" },
             { id: "SHORT_TERM", label: "Short-Term (#5cd3c1)" },
@@ -407,9 +407,9 @@ export default function MemoryGraphView() {
             <button
               key={cat.id}
               onClick={() => setSelectedType(cat.id)}
-              className={`px-3 py-1 rounded text-xs font-mono transition-all ${
+              className={`px-3 py-1 rounded-lg text-xs font-mono transition-all ${
                 selectedType === cat.id
-                  ? "bg-[#1f2d47] text-white font-bold border-b-2 border-[#5cd3c1]"
+                  ? "bg-[#1f2d47] text-white font-bold border-b-2 border-[#5cd3c1] shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -418,17 +418,30 @@ export default function MemoryGraphView() {
           ))}
         </div>
 
-        {/* Right Action Buttons */}
+        {/* Right Action Buttons & Drawer Toggle */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-mono transition-all ${
+              isDrawerOpen
+                ? "bg-[#1f2d47] border-[#5cd3c1] text-[#5cd3c1]"
+                : "bg-[#131b2e] border-[#202e48] text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {isDrawerOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+            <span>{isDrawerOpen ? "Hide Metadata" : "Inspect Metadata"}</span>
+          </button>
+
           <button
             onClick={handleResetView}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#131b2e] border border-[#202e48] text-slate-300 hover:text-white rounded-lg text-xs font-mono"
           >
             <RotateCw size={14} /> Reset View
           </button>
+
           <button
             onClick={handleRefreshIndex}
-            className={`flex items-center gap-1.5 px-3 py-1.5 bg-[#5cd3c1] text-[#0b0f19] font-bold rounded-lg text-xs font-mono shadow-md hover:bg-[#73e0cf] ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 bg-[#5cd3c1] text-[#0b0f19] font-bold rounded-lg text-xs font-mono shadow-md hover:bg-[#73e0cf] ${
               isRefreshing ? "animate-pulse" : ""
             }`}
           >
@@ -467,8 +480,8 @@ export default function MemoryGraphView() {
         </div>
       </div>
 
-      {/* Main Force Graph Canvas Container (Constrained width so graph centers to the left of the side drawer) */}
-      <div className="w-[calc(100%-380px)] h-full">
+      {/* Main Force Graph Canvas Container (Dynamic Width based on Drawer state) */}
+      <div className={`h-full transition-all duration-300 ${isDrawerOpen ? "w-[calc(100%-380px)]" : "w-full"}`}>
         {isMounted && (
           <ForceGraph2D
             ref={fgRef}
@@ -488,84 +501,94 @@ export default function MemoryGraphView() {
         )}
       </div>
 
-      {/* Right Memory Node Inspection Side Drawer */}
-      <aside className="absolute top-20 right-6 z-10 w-88 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] rounded-xl p-5 shadow-2xl space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto font-mono">
-        <div className="flex items-center justify-between border-b border-[#1b273d] pb-3">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-            <Database size={15} className="text-[#5cd3c1]" /> Memory Node Metadata
-          </h3>
-        </div>
-
-        {selectedNode ? (
-          <div className="space-y-4 text-xs">
-            {/* Selected Node Card */}
-            <div className="bg-[#131b2e] border border-[#202e48] p-3 rounded-lg flex items-center gap-3">
-              <div
-                className="w-5 h-5 rounded-full flex-shrink-0 shadow-md border border-white/40"
-                style={{ backgroundColor: selectedNode.color }}
-              />
-              <div className="overflow-hidden">
-                <h4 className="font-bold text-white truncate">{selectedNode.label}</h4>
-                <p className="text-[10px] text-slate-400">{selectedNode.type}</p>
-              </div>
-            </div>
-
-            {/* Field Table */}
-            <div className="space-y-2 border-b border-[#1b273d] pb-3">
-              <div className="flex justify-between py-1 border-b border-[#172238]">
-                <span className="text-slate-400">Memory Hash</span>
-                <span className="text-[#5cd3c1] font-bold">{selectedNode.memoryHash}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[#172238]">
-                <span className="text-slate-400">Vector Embeddings</span>
-                <span className="text-slate-200 text-[10px]">{selectedNode.vectorDimension}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[#172238]">
-                <span className="text-slate-400">Cosine Similarity</span>
-                <span className="text-[#737ccf] font-bold">{selectedNode.similarityScore}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[#172238]">
-                <span className="text-slate-400">Decay Factor</span>
-                <span className="text-slate-200">{selectedNode.decayFactor}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[#172238]">
-                <span className="text-slate-400">Retention Policy</span>
-                <span className="text-slate-300 text-[10px]">{selectedNode.retentionPolicy}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-[#172238]">
-                <span className="text-slate-400">Access Hit Count</span>
-                <span className="text-cyan-400 font-bold">{selectedNode.accessCount}</span>
-              </div>
-            </div>
-
-            {/* Memory Snippet Box */}
-            <div>
-              <label className="text-[10px] uppercase text-slate-400 block mb-1">Memory Content Snippet</label>
-              <div className="bg-[#070a12] border border-[#1b273d] p-3 rounded-lg text-slate-300 text-[11px] leading-relaxed">
-                {selectedNode.content}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="space-y-2 pt-1">
-              <button
-                onClick={handlePromoteToLongTerm}
-                className="w-full bg-[#737ccf] hover:bg-[#858de0] text-white font-bold py-2 rounded-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Pin size={14} /> Promote to Long-Term Memory
-              </button>
-              <button
-                onClick={handlePruneNode}
-                className="w-full border border-red-500/50 text-red-400 hover:bg-red-500/10 font-bold py-2 rounded-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Trash2 size={14} /> Prune Memory Chunk
-              </button>
-            </div>
+      {/* Right Memory Node Metadata Side Drawer with Close Button */}
+      {isDrawerOpen && (
+        <aside className="absolute top-20 right-6 z-30 w-88 bg-[#0e1424]/95 backdrop-blur-md border border-[#1b273d] rounded-2xl p-5 shadow-2xl space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto font-mono transition-all">
+          {/* Drawer Header with Close 'X' Button */}
+          <div className="flex items-center justify-between border-b border-[#1b273d] pb-3">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Database size={16} className="text-[#5cd3c1]" /> Memory Node Metadata
+            </h3>
+            <button
+              onClick={() => setIsDrawerOpen(false)}
+              className="p-1 rounded-lg bg-[#131b2e] border border-[#202e48] text-slate-400 hover:text-white hover:bg-red-500/20 hover:border-red-500/40 transition-all"
+              title="Close Metadata Panel"
+            >
+              <X size={16} />
+            </button>
           </div>
-        ) : (
-          <p className="text-slate-500 text-xs font-mono">Select a node in the graph to inspect metadata.</p>
-        )}
-      </aside>
+
+          {selectedNode ? (
+            <div className="space-y-4 text-xs">
+              {/* Selected Node Header Badge */}
+              <div className="bg-[#131b2e] border border-[#202e48] p-3 rounded-xl flex items-center gap-3">
+                <div
+                  className="w-5 h-5 rounded-full flex-shrink-0 shadow-md border border-white/40"
+                  style={{ backgroundColor: selectedNode.color }}
+                />
+                <div className="overflow-hidden">
+                  <h4 className="font-bold text-white truncate text-sm">{selectedNode.label}</h4>
+                  <p className="text-[10px] text-slate-400">{selectedNode.type}</p>
+                </div>
+              </div>
+
+              {/* Field Metadata Table */}
+              <div className="space-y-2 border-b border-[#1b273d] pb-3">
+                <div className="flex justify-between py-1 border-b border-[#172238]">
+                  <span className="text-slate-400">Memory Hash</span>
+                  <span className="text-[#5cd3c1] font-bold">{selectedNode.memoryHash}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#172238]">
+                  <span className="text-slate-400">Vector Embeddings</span>
+                  <span className="text-slate-200 text-[10px]">{selectedNode.vectorDimension}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#172238]">
+                  <span className="text-slate-400">Cosine Similarity</span>
+                  <span className="text-[#737ccf] font-bold">{selectedNode.similarityScore}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#172238]">
+                  <span className="text-slate-400">Decay Factor</span>
+                  <span className="text-slate-200">{selectedNode.decayFactor}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#172238]">
+                  <span className="text-slate-400">Retention Policy</span>
+                  <span className="text-slate-300 text-[10px]">{selectedNode.retentionPolicy}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#172238]">
+                  <span className="text-slate-400">Access Hit Count</span>
+                  <span className="text-cyan-400 font-bold">{selectedNode.accessCount}</span>
+                </div>
+              </div>
+
+              {/* Memory Snippet Box */}
+              <div>
+                <label className="text-[10px] uppercase text-slate-400 block mb-1">Memory Content Snippet</label>
+                <div className="bg-[#070a12] border border-[#1b273d] p-3 rounded-xl text-slate-300 text-[11px] leading-relaxed">
+                  {selectedNode.content}
+                </div>
+              </div>
+
+              {/* Functional Actions */}
+              <div className="space-y-2 pt-1">
+                <button
+                  onClick={handlePromoteToLongTerm}
+                  className="w-full bg-[#737ccf] hover:bg-[#858de0] text-white font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-2 shadow-md"
+                >
+                  <Pin size={14} /> Promote to Long-Term Memory
+                </button>
+                <button
+                  onClick={handlePruneNode}
+                  className="w-full border border-red-500/50 text-red-400 hover:bg-red-500/10 font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={14} /> Prune Memory Chunk
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-500 text-xs font-mono">Select any node in the graph to inspect metadata.</p>
+          )}
+        </aside>
+      )}
 
       {/* Bottom Left Memory Legend Panel */}
       <div className="absolute bottom-6 left-6 z-10 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] rounded-xl p-4 w-64 space-y-2 text-xs font-mono shadow-lg">
