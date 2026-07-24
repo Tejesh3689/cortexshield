@@ -245,36 +245,40 @@ export default function MemoryGraphView() {
   const fgRef = useRef<any>(null);
 
   useEffect(() => {
-    // 1. Fetch initial graph data from proxy-engine (server side proxy in Next.js or direct if configured)
-    // For now we simulate an empty initial state to allow WS to populate
-    setGraphData({ nodes: [], links: [] });
-    
-    // 2. Connect to realtime-gateway WebSocket
-    // URL must be provided via NEXT_PUBLIC_WS_URL — no localhost fallback.
-    const connectWs = async () => {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
-      if (!wsUrl) {
-        console.warn("NEXT_PUBLIC_WS_URL is not set — realtime graph updates disabled.");
-        return;
-      }
-      const token = await getToken();
-      const ws = new WebSocket(`${wsUrl}?token=${token}&tenant=${tenantId}`);
-      
-      ws.onmessage = (event) => {
+    setIsMounted(true);
+
+    // Connect to realtime-gateway WebSocket.
+    // URL must be provided via NEXT_PUBLIC_WS_URL — no localhost fallback (ADR-0013).
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+    if (!wsUrl) {
+      console.warn("NEXT_PUBLIC_WS_URL is not set — realtime graph updates disabled.");
+      return;
+    }
+
+    const ws = new WebSocket(wsUrl);
+    ws.onmessage = (event) => {
+      try {
         const update = JSON.parse(event.data);
         if (update.type === "node_added") {
-          setGraphData(prev => {
-            if (prev.nodes.find((n: any) => n.id === update.data.id)) return prev;
+          setGraphData((prev) => {
+            if (prev.nodes.find((n) => n.id === update.data.id)) return prev;
             return { ...prev, nodes: [...prev.nodes, update.data] };
           });
         } else if (update.type === "edge_added") {
-          setGraphData(prev => {
-            return { ...prev, links: [...prev.links, update.data] };
-          });
+          setGraphData((prev) => ({ ...prev, links: [...prev.links, update.data] }));
         }
-      };
-      wsRef.current = ws;
+      } catch (e) {
+        console.error("WS parse error", e);
+      }
     };
+    wsRef.current = ws;
+
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  const handleUpdateNode = (updated: MemoryNode) => {
     setGraphData((prev) => ({
       ...prev,
       nodes: prev.nodes.map((n) => (n.id === selectedNode.id ? updated : n)),
