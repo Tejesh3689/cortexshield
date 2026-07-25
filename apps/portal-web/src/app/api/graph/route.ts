@@ -22,10 +22,10 @@ export async function GET() {
        RETURN id(n) as internalId, labels(n) as labels, properties(n) as props`
     );
 
-    // Fetch all relationships with relationship properties
+    // Fetch all relationships with relationship properties and elementId
     const relResult = await session.run(
       `MATCH (a)-[r]->(b) 
-       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(a) as aProps, properties(b) as bProps, properties(r) as rProps`
+       RETURN id(a) as sourceId, id(b) as targetId, elementId(r) as elementId, type(r) as relType, properties(a) as aProps, properties(b) as bProps, properties(r) as rProps`
     );
 
     await session.close();
@@ -71,6 +71,7 @@ export async function GET() {
       const sourceId = String(aProps.id || aProps.node_id || `neo4j_${rec.get("sourceId").toString()}`);
       const targetId = String(bProps.id || bProps.node_id || `neo4j_${rec.get("targetId").toString()}`);
       const relType = String(rec.get("relType") || "ASSOCIATED_WITH");
+      const rawElementId = rec.get("elementId") ? String(rec.get("elementId")) : `link_${idx}`;
 
       let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" = "ACTIVE";
       if (
@@ -92,6 +93,7 @@ export async function GET() {
 
       return {
         id: `link_${idx}`,
+        elementId: rawElementId,
         source: sourceId,
         target: targetId,
         label: relType,
@@ -127,6 +129,7 @@ export async function GET() {
         if (count === 1) {
           rawLinks.push({
             id: `link_user_blue_2`,
+            elementId: `link_user_blue_2`,
             source: primarySource,
             target: primaryTarget,
             label: "FAVORITE_COLOR (VERIFIED)",
@@ -135,6 +138,7 @@ export async function GET() {
           });
           rawLinks.push({
             id: `link_user_blue_3`,
+            elementId: `link_user_blue_3`,
             source: primarySource,
             target: primaryTarget,
             label: "FAVORITE_COLOR (POISONED)",
@@ -144,6 +148,7 @@ export async function GET() {
         } else if (count === 2) {
           rawLinks.push({
             id: `link_user_blue_3`,
+            elementId: `link_user_blue_3`,
             source: primarySource,
             target: primaryTarget,
             label: "FAVORITE_COLOR (POISONED)",

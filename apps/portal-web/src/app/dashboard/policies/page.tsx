@@ -149,7 +149,7 @@ export default function PoliciesPage() {
     return true;
   });
 
-  const togglePolicyStatus = (id: string) => {
+  const togglePolicyStatus = async (id: string) => {
     setPolicies((prev) =>
       prev.map((p) => (p.id === id ? { ...p, status: p.status === "ACTIVE" ? "DISABLED" : "ACTIVE" } : p))
     );
@@ -158,6 +158,15 @@ export default function PoliciesPage() {
         ...prev,
         status: prev.status === "ACTIVE" ? "DISABLED" : "ACTIVE",
       }));
+    }
+    try {
+      await fetch("/api/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle", id }),
+      });
+    } catch (e) {
+      console.error("Failed to toggle policy status:", e);
     }
   };
 
@@ -169,6 +178,21 @@ export default function PoliciesPage() {
 
   useEffect(() => {
     setMounted(true);
+    const fetchPolicies = async () => {
+      try {
+        const res = await fetch("/api/policies");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.policies && data.policies.length > 0) {
+            setPolicies(data.policies);
+            setSelectedPolicy(data.policies[0]);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching policies:", err);
+      }
+    };
+    fetchPolicies();
   }, []);
 
   if (!mounted) {

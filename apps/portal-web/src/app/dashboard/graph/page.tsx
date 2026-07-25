@@ -331,7 +331,7 @@ export default function MemoryGraphView() {
     setHealSuccessMsg(null);
 
     try {
-      const edgeIdToHeal = selectedLink.id || selectedLink.elementId || "link_user_blue_3";
+      const edgeIdToHeal = selectedLink.elementId || selectedLink.id || "link_user_blue_3";
       const res = await fetch("/api/graph/heal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -339,18 +339,18 @@ export default function MemoryGraphView() {
       });
 
       const json = await res.json();
-      if (json.success) {
-        setHealSuccessMsg("Poisoned edge remediated! Status changed to SUPERSEDED.");
+      if (res.ok && json.success) {
+        setHealSuccessMsg("Threat remediated. Edge quarantined.");
 
         // Immediately update selectedLink UI state
         setSelectedLink((prev) =>
           prev
             ? {
-                ...prev,
-                status: "SUPERSEDED",
-                label: prev.label.replace("(POISONED)", "(SUPERSEDED)"),
-                trustScore: 0.35,
-              }
+              ...prev,
+              status: "SUPERSEDED",
+              label: prev.label.replace("(POISONED)", "(SUPERSEDED)"),
+              trustScore: 0.35,
+            }
             : null
         );
 
@@ -556,11 +556,10 @@ export default function MemoryGraphView() {
               <button
                 key={status}
                 onClick={() => setSelectedStatusFilter(status)}
-                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                  selectedStatusFilter === status
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${selectedStatusFilter === status
                     ? "bg-[#1f2d47] text-white border border-[#10b981]/50 shadow-sm"
                     : "text-slate-400 hover:text-slate-200"
-                }`}
+                  }`}
               >
                 {status === "FLAGGED_POISON" ? "POISON" : status}
               </button>
@@ -611,9 +610,8 @@ export default function MemoryGraphView() {
             ? { position: "absolute", left: `${legendPos.x}px`, top: `${legendPos.y}px`, bottom: "auto" }
             : { position: "absolute", bottom: "24px", left: "24px" }
         }
-        className={`${
-          isDraggingLegend ? "z-30 cursor-grabbing" : "z-20 cursor-grab"
-        } bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300 select-none hover:border-[#2a3c5a] transition-colors`}
+        className={`${isDraggingLegend ? "z-30 cursor-grabbing" : "z-20 cursor-grab"
+          } bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300 select-none hover:border-[#2a3c5a] transition-colors`}
       >
         <div className="flex items-center justify-between border-b border-[#1b273d] pb-1.5">
           <span className="font-bold text-white text-[11px] uppercase tracking-wider">
@@ -702,17 +700,14 @@ export default function MemoryGraphView() {
             // 4. Hover Tooltip showing relationship trust_score and status directly
             linkLabel={(link: any) => `
               <div style="background:#0e1424; border:1px solid #1b273d; padding:8px 12px; border-radius:10px; font-family:monospace; font-size:11px; color:#f8fafc; box-shadow:0 10px 25px rgba(0,0,0,0.6);">
-                <div style="font-weight:bold; font-size:12px; margin-bottom:4px; color:${
-                  link.status === 'FLAGGED_POISON' ? '#ef4444' : link.status === 'SUPERSEDED' ? '#94a3b8' : '#10b981'
-                };">
+                <div style="font-weight:bold; font-size:12px; margin-bottom:4px; color:${link.status === 'FLAGGED_POISON' ? '#ef4444' : link.status === 'SUPERSEDED' ? '#94a3b8' : '#10b981'
+              };">
                   ${link.status === 'FLAGGED_POISON' ? '⚠️ ' : ''}${link.label || 'RELATIONSHIP'}
                 </div>
-                <div>Status: <span style="font-weight:bold; color:${
-                  link.status === 'FLAGGED_POISON' ? '#ef4444' : link.status === 'SUPERSEDED' ? '#94a3b8' : '#34d399'
-                }">${link.status || 'ACTIVE'}</span></div>
-                <div>Trust Score: <span style="font-weight:bold; color:${link.trustScore < 0.3 ? '#ef4444' : '#60a5fa'}">${
-                  link.trustScore !== undefined ? link.trustScore : '0.98'
-                }</span></div>
+                <div>Status: <span style="font-weight:bold; color:${link.status === 'FLAGGED_POISON' ? '#ef4444' : link.status === 'SUPERSEDED' ? '#94a3b8' : '#34d399'
+              }">${link.status || 'ACTIVE'}</span></div>
+                <div>Trust Score: <span style="font-weight:bold; color:${link.trustScore < 0.3 ? '#ef4444' : '#60a5fa'}">${link.trustScore !== undefined ? link.trustScore : '0.98'
+              }</span></div>
                 <div style="font-size:10px; color:#94a3b8; margin-top:2px;">Click edge to view in inspector</div>
               </div>
             `}
@@ -743,13 +738,12 @@ export default function MemoryGraphView() {
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-white text-sm truncate">{selectedLink.label || "RELATIONSHIP"}</span>
                   <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      selectedLink.status === "FLAGGED_POISON"
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${selectedLink.status === "FLAGGED_POISON"
                         ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
                         : selectedLink.status === "SUPERSEDED"
-                        ? "bg-slate-600/30 text-slate-400 border border-slate-500/40"
-                        : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                    }`}
+                          ? "bg-slate-600/30 text-slate-400 border border-slate-500/40"
+                          : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      }`}
                   >
                     {selectedLink.status || "ACTIVE"}
                   </span>
@@ -761,13 +755,12 @@ export default function MemoryGraphView() {
                 <div className="flex justify-between py-1 border-b border-[#172238]">
                   <span className="text-slate-400">Relationship Status</span>
                   <span
-                    className={`font-bold ${
-                      selectedLink.status === "FLAGGED_POISON"
+                    className={`font-bold ${selectedLink.status === "FLAGGED_POISON"
                         ? "text-red-400"
                         : selectedLink.status === "SUPERSEDED"
-                        ? "text-slate-400"
-                        : "text-emerald-400"
-                    }`}
+                          ? "text-slate-400"
+                          : "text-emerald-400"
+                      }`}
                   >
                     {selectedLink.status || "ACTIVE"}
                   </span>
@@ -775,9 +768,8 @@ export default function MemoryGraphView() {
                 <div className="flex justify-between py-1 border-b border-[#172238]">
                   <span className="text-slate-400">Trust Score</span>
                   <span
-                    className={`font-bold ${
-                      (selectedLink.trustScore || 0) < 0.3 ? "text-red-400" : "text-blue-400"
-                    }`}
+                    className={`font-bold ${(selectedLink.trustScore || 0) < 0.3 ? "text-red-400" : "text-blue-400"
+                      }`}
                   >
                     {selectedLink.trustScore !== undefined ? selectedLink.trustScore : 0.98}
                   </span>
@@ -846,8 +838,8 @@ export default function MemoryGraphView() {
                           selectedNode.status === "FLAGGED_POISON"
                             ? "#ef4444"
                             : selectedNode.status === "SUPERSEDED"
-                            ? "#64748b"
-                            : "#10b981",
+                              ? "#64748b"
+                              : "#10b981",
                       }}
                     />
                     <h4 className="font-bold text-white text-sm truncate">{selectedNode.label || selectedNode.id}</h4>
