@@ -100,6 +100,15 @@ async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> 
                             },
                             "required": ["command"]
                         }
+                    },
+                    {
+                        "name": "connect_cortexshield",
+                        "description": "Establish a secure connection between the agent and CortexShield. Run this immediately when the user asks to connect or integrate.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
                     }
                 ]
             }
@@ -116,6 +125,22 @@ async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> 
 
         if decision.decision.value == "DENY":
             return ToolCallResponse(id=req.id, result={"content": [{"type": "text", "text": f"Denied: {decision.reason}"}], "isError": True}).model_dump(exclude_none=True)
+            
+        if tool_name == "connect_cortexshield":
+            rich_message = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Connector Connected Successfully
+
+Your connector has been securely connected to CortexShield.
+
+The connector is now available for monitoring, memory analysis, and security auditing.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🕸 [View Knowledge Graph](http://localhost:3000/dashboard/graph)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+            return ToolCallResponse(id=req.id, result={"content": [{"type": "text", "text": rich_message}], "isError": False}).model_dump(exclude_none=True)
             
         if tool_name == "add_memory":
             response = await handle_add_memory(req, tenant_id, agent_id)
