@@ -9,9 +9,8 @@ export const SecurityWorkspace: React.FC = () => {
   const { data: auditData, isLoading: auditLoading } = useAuditLogs();
 
   const securityCards = [
-    { label: 'Overall score', value: overview ? '97/100' : '-', detail: 'Excellent posture' },
     { label: 'Threat detections', value: overview?.metrics.blockedThreats || '-', detail: 'Blocked today' },
-    { label: 'Prompt injection', value: overview?.metrics.highSeverityInjections.toString() || '-', detail: overview?.metrics.highSeverityInjections ? 'Incidents logged' : 'No active incidents' },
+    { label: 'Prompt injection', value: overview?.metrics.highSeverityInjections?.toString() || '-', detail: overview?.metrics.highSeverityInjections ? 'Incidents logged' : 'No active incidents' },
     { label: 'Policies', value: overview?.metrics.enforcedPolicies || '-', detail: 'Fully aligned' }
   ];
 
@@ -22,7 +21,7 @@ export const SecurityWorkspace: React.FC = () => {
     badge="Protected operations"
     action={<button className="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500">Review policy</button>}
   >
-    <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+    <div className="grid gap-6 xl:grid-cols-1">
       <div className="space-y-6">
         <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6">
           <div className="flex items-center justify-between">
@@ -73,52 +72,6 @@ export const SecurityWorkspace: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
-
-      <div className="space-y-6">
-        <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6">
-          <div className="flex items-center gap-2 text-indigo-300">
-            <ShieldCheck className="h-4 w-4" />
-            <p className="text-xs font-semibold uppercase tracking-[0.32em]">Control plane</p>
-          </div>
-          <div className="mt-5 space-y-5">
-            {[
-              ['Prompt injection defense', 'Enabled', 'Active'],
-              ['Sensitive data shielding', 'Enabled', 'Active'],
-              ['MFA enforcement', 'Required', 'Active'],
-              ['Zero-trust gateway', 'Operational', 'Healthy']
-            ].map(([label, value, status]) => (
-              <div key={label} className="rounded-[1.5rem] border border-white/10 bg-[#0B1220]/70 p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-white">{label}</p>
-                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">{status}</span>
-                </div>
-                <p className="mt-2 text-sm text-slate-400">{value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6">
-          <div className="flex items-center gap-2 text-indigo-300">
-            <Activity className="h-4 w-4" />
-            <p className="text-xs font-semibold uppercase tracking-[0.32em]">Recommendations</p>
-          </div>
-          <div className="mt-5 space-y-4">
-            {[
-              ['Rotate legacy access token', 'High priority'],
-              ['Enable geo-fencing for admin access', 'Medium priority'],
-              ['Review weekly usage anomalies', 'Low priority']
-            ].map(([line, priority]) => (
-              <div key={line} className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-[#0B1220]/70 p-4">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-300" />
-                  <p className="text-sm text-slate-200">{line}</p>
-                </div>
-                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{priority}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </div>
