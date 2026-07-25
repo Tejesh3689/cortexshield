@@ -1,36 +1,167 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ShieldCheck,
   ShieldAlert,
   Brain,
-  Activity,
   Zap,
   TrendingUp,
   BarChart3,
   FileText,
-  Layers,
   Radio,
   CheckCircle2,
-  AlertTriangle,
   ArrowUpRight,
-  Clock,
-  CreditCard,
   RefreshCw,
   Lock,
-  Search,
-  ChevronRight
+  ChevronRight,
+  Database
 } from "lucide-react";
+
+interface OverviewMetrics {
+  shieldedRequests: string;
+  shieldedRequestsGrowth: string;
+  blockedThreats: string;
+  highSeverityInjections: number;
+  memoryIntegrity: string;
+  nodesSynced: string;
+  enforcedPolicies: string;
+  activeRulesText: string;
+  latencyMs: string;
+}
+
+interface ChartBar {
+  time: string;
+  val: number;
+  threat: boolean;
+}
+
+interface LogEvent {
+  status: string;
+  type: string;
+  ip: string;
+  rule: string;
+  time: string;
+  color: string;
+}
+
+interface ThreatVector {
+  label: string;
+  pct: number;
+  color: string;
+  textColor: string;
+}
 
 export default function DashboardOverview() {
   const [timeframe, setTimeframe] = useState("24h");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dbConnected, setDbConnected] = useState(false);
+  const [dbSource, setDbSource] = useState("Loading Telemetry...");
+
+  const [metrics, setMetrics] = useState<OverviewMetrics>({
+    shieldedRequests: "4,892,104",
+    shieldedRequestsGrowth: "+14.2%",
+    blockedThreats: "1,284",
+    highSeverityInjections: 12,
+    memoryIntegrity: "98.4%",
+    nodesSynced: "1,420",
+    enforcedPolicies: "24 / 24",
+    activeRulesText: "PII & Provenance Active",
+    latencyMs: "3.8ms",
+  });
+
+  const [chartData, setChartData] = useState<ChartBar[]>([
+    { time: "00:00", val: 35, threat: false },
+    { time: "02:00", val: 50, threat: false },
+    { time: "04:00", val: 28, threat: false },
+    { time: "06:00", val: 85, threat: true },
+    { time: "08:00", val: 40, threat: false },
+    { time: "10:00", val: 65, threat: false },
+    { time: "12:00", val: 95, threat: true },
+    { time: "14:00", val: 45, threat: false },
+    { time: "16:00", val: 75, threat: false },
+    { time: "18:00", val: 30, threat: false },
+    { time: "20:00", val: 60, threat: false },
+    { time: "22:00", val: 90, threat: true },
+  ]);
+
+  const [liveLogs, setLiveLogs] = useState<LogEvent[]>([
+    {
+      status: "BLOCKED",
+      type: "PROMPT_INJECTION",
+      ip: "192.168.0.254",
+      rule: "PR-INJ-009",
+      time: "Just now",
+      color: "border-red-500/40 text-red-400 bg-red-950/20",
+    },
+    {
+      status: "SANITIZED",
+      type: "PII_LEAK_MASKED",
+      ip: "172.16.0.42",
+      rule: "PII-MASK-SSN",
+      time: "2 mins ago",
+      color: "border-amber-500/40 text-amber-400 bg-amber-950/20",
+    },
+    {
+      status: "QUARANTINED",
+      type: "POISONED_MEMORY_CHUNK",
+      ip: "10.0.0.18",
+      rule: "MEM-INTEG-04",
+      time: "5 mins ago",
+      color: "border-purple-500/40 text-[#737ccf] bg-purple-950/20",
+    },
+    {
+      status: "VERIFIED",
+      type: "PROVENANCE_PASSED",
+      ip: "10.0.0.1",
+      rule: "CYPHER-OK-200",
+      time: "8 mins ago",
+      color: "border-[#5cd3c1]/40 text-[#5cd3c1] bg-[#5cd3c1]/10",
+    },
+  ]);
+
+  const [threatVectors, setThreatVectors] = useState<ThreatVector[]>([
+    { label: "Prompt Injection Attacks", pct: 48, color: "bg-red-400", textColor: "text-red-400" },
+    { label: "PII / Secret Data Leakage", pct: 26, color: "bg-amber-400", textColor: "text-amber-400" },
+    { label: "Vector Memory Poisoning", pct: 16, color: "bg-[#737ccf]", textColor: "text-purple-400" },
+    { label: "Malformed Tool Payload", pct: 10, color: "bg-cyan-400", textColor: "text-cyan-400" },
+  ]);
+
+  const fetchOverviewData = useCallback(async (selectedTimeframe: string) => {
+    setIsRefreshing(true);
+    try {
+      const res = await fetch(`/api/overview?timeframe=${selectedTimeframe}`);
+      if (!res.ok) throw new Error("Failed to fetch overview data");
+      const data = await res.json();
+
+      if (data.success) {
+        if (data.metrics) setMetrics(data.metrics);
+        if (data.chartData) setChartData(data.chartData);
+        if (data.liveLogs) setLiveLogs(data.liveLogs);
+        if (data.threatVectors) setThreatVectors(data.threatVectors);
+        setDbConnected(data.isDbConnected ?? true);
+        setDbSource(data.dbSource || "Neon Postgres & Neo4j Aura");
+      }
+    } catch (err) {
+      console.error("Overview data load error:", err);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOverviewData(timeframe);
+    const interval = setInterval(() => {
+      fetchOverviewData(timeframe);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [timeframe, fetchOverviewData]);
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 1000);
+    fetchOverviewData(timeframe);
   };
 
   return (
@@ -46,8 +177,13 @@ export default function DashboardOverview() {
               <h1 className="text-2xl font-black tracking-tight text-white font-mono flex items-center gap-2">
                 CORTEXSHIELD OVERVIEW
               </h1>
-              <p className="text-xs text-slate-400 font-mono">
+              <p className="text-xs text-slate-400 font-mono flex items-center gap-2">
                 AI Firewall & System Provenance Security Intelligence Hub
+                {dbConnected && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                    <Database size={10} /> Live Backend Connected
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -63,7 +199,7 @@ export default function DashboardOverview() {
 
           <div className="flex items-center gap-2 bg-[#0e1424] border border-[#1b273d] px-3 py-1.5 rounded-xl text-xs">
             <span className="text-slate-400">LATENCY:</span>
-            <span className="text-cyan-400 font-bold">3.8ms</span>
+            <span className="text-cyan-400 font-bold">{metrics.latencyMs}</span>
           </div>
 
           {/* Timeframe Selector */}
@@ -85,9 +221,10 @@ export default function DashboardOverview() {
 
           <button
             onClick={handleRefresh}
-            className="p-2 rounded-xl bg-[#0e1424] border border-[#1b273d] text-slate-300 hover:text-white transition-all"
+            title="Refresh Live Data"
+            className="p-2 rounded-xl bg-[#0e1424] border border-[#1b273d] text-slate-300 hover:text-white transition-all hover:border-[#5cd3c1]/40"
           >
-            <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />
+            <RefreshCw size={16} className={isRefreshing ? "animate-spin text-[#5cd3c1]" : ""} />
           </button>
         </div>
       </div>
@@ -103,9 +240,9 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div>
-            <h3 className="text-2xl font-black text-white">4,892,104</h3>
+            <h3 className="text-2xl font-black text-white">{metrics.shieldedRequests}</h3>
             <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1">
-              <TrendingUp size={12} /> +14.2% from previous {timeframe}
+              <TrendingUp size={12} /> {metrics.shieldedRequestsGrowth} from previous {timeframe}
             </p>
           </div>
           <div className="w-full bg-[#172238] h-1.5 rounded-full overflow-hidden">
@@ -122,9 +259,9 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div>
-            <h3 className="text-2xl font-black text-white">1,284</h3>
+            <h3 className="text-2xl font-black text-white">{metrics.blockedThreats}</h3>
             <p className="text-[11px] text-red-400 flex items-center gap-1 mt-1">
-              <ShieldAlert size={12} /> 12 High Severity Injections
+              <ShieldAlert size={12} /> {metrics.highSeverityInjections} High Severity Injections
             </p>
           </div>
           <div className="w-full bg-[#172238] h-1.5 rounded-full overflow-hidden">
@@ -141,9 +278,9 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div>
-            <h3 className="text-2xl font-black text-white">98.4%</h3>
+            <h3 className="text-2xl font-black text-white">{metrics.memoryIntegrity}</h3>
             <p className="text-[11px] text-[#737ccf] flex items-center gap-1 mt-1">
-              <CheckCircle2 size={12} /> 1,420 Nodes Synced
+              <CheckCircle2 size={12} /> {metrics.nodesSynced} Nodes Synced
             </p>
           </div>
           <div className="w-full bg-[#172238] h-1.5 rounded-full overflow-hidden">
@@ -160,9 +297,9 @@ export default function DashboardOverview() {
             </div>
           </div>
           <div>
-            <h3 className="text-2xl font-black text-white">24 / 24</h3>
+            <h3 className="text-2xl font-black text-white">{metrics.enforcedPolicies}</h3>
             <p className="text-[11px] text-[#5cd3c1] flex items-center gap-1 mt-1">
-              <CheckCircle2 size={12} /> PII & Provenance Active
+              <CheckCircle2 size={12} /> {metrics.activeRulesText}
             </p>
           </div>
           <div className="w-full bg-[#172238] h-1.5 rounded-full overflow-hidden">
@@ -189,22 +326,9 @@ export default function DashboardOverview() {
               </span>
             </div>
 
-            {/* Visual Bar Graph Simulation */}
+            {/* Visual Bar Graph Stream */}
             <div className="h-44 flex items-end justify-between gap-2 pt-6 pb-2 border-b border-[#172238]">
-              {[
-                { time: "00:00", val: 35, threat: false },
-                { time: "02:00", val: 50, threat: false },
-                { time: "04:00", val: 28, threat: false },
-                { time: "06:00", val: 85, threat: true },
-                { time: "08:00", val: 40, threat: false },
-                { time: "10:00", val: 65, threat: false },
-                { time: "12:00", val: 95, threat: true },
-                { time: "14:00", val: 45, threat: false },
-                { time: "16:00", val: 75, threat: false },
-                { time: "18:00", val: 30, threat: false },
-                { time: "20:00", val: 60, threat: false },
-                { time: "22:00", val: 90, threat: true },
-              ].map((bar, i) => (
+              {chartData.map((bar, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
                   <div
                     className={`w-full rounded-t-md transition-all group-hover:brightness-125 ${
@@ -229,7 +353,7 @@ export default function DashboardOverview() {
                   <span className="w-3 h-3 rounded bg-red-500" /> Blocked Threat Spikes
                 </span>
               </div>
-              <span className="text-slate-300 font-bold">Peak Overhead: 4.1ms</span>
+              <span className="text-slate-300 font-bold">Peak Overhead: {metrics.latencyMs}</span>
             </div>
           </div>
 
@@ -245,40 +369,7 @@ export default function DashboardOverview() {
             </div>
 
             <div className="space-y-3 text-xs">
-              {[
-                {
-                  status: "BLOCKED",
-                  type: "PROMPT_INJECTION",
-                  ip: "192.168.0.254",
-                  rule: "PR-INJ-009",
-                  time: "Just now",
-                  color: "border-red-500/40 text-red-400 bg-red-950/20",
-                },
-                {
-                  status: "SANITIZED",
-                  type: "PII_LEAK_MASKED",
-                  ip: "172.16.0.42",
-                  rule: "PII-MASK-SSN",
-                  time: "2 mins ago",
-                  color: "border-amber-500/40 text-amber-400 bg-amber-950/20",
-                },
-                {
-                  status: "QUARANTINED",
-                  type: "POISONED_MEMORY_CHUNK",
-                  ip: "10.0.0.18",
-                  rule: "MEM-INTEG-04",
-                  time: "5 mins ago",
-                  color: "border-purple-500/40 text-[#737ccf] bg-purple-950/20",
-                },
-                {
-                  status: "VERIFIED",
-                  type: "PROVENANCE_PASSED",
-                  ip: "10.0.0.1",
-                  rule: "CYPHER-OK-200",
-                  time: "8 mins ago",
-                  color: "border-[#5cd3c1]/40 text-[#5cd3c1] bg-[#5cd3c1]/10",
-                },
-              ].map((ev, i) => (
+              {liveLogs.map((ev, i) => (
                 <div
                   key={i}
                   className="bg-[#070a12] border border-[#172238] p-3 rounded-xl flex items-center justify-between hover:border-[#202e48] transition-all"
@@ -382,45 +473,17 @@ export default function DashboardOverview() {
             </h3>
 
             <div className="space-y-3 text-xs">
-              <div>
-                <div className="flex justify-between py-1 text-slate-300">
-                  <span>Prompt Injection Attacks</span>
-                  <span className="font-bold text-red-400">48%</span>
+              {threatVectors.map((item, i) => (
+                <div key={i}>
+                  <div className="flex justify-between py-1 text-slate-300">
+                    <span>{item.label}</span>
+                    <span className={`font-bold ${item.textColor}`}>{item.pct}%</span>
+                  </div>
+                  <div className="w-full bg-[#172238] h-2 rounded-full overflow-hidden">
+                    <div className={`${item.color} h-full`} style={{ width: `${item.pct}%` }} />
+                  </div>
                 </div>
-                <div className="w-full bg-[#172238] h-2 rounded-full overflow-hidden">
-                  <div className="bg-red-400 h-full w-[48%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between py-1 text-slate-300">
-                  <span>PII / Secret Data Leakage</span>
-                  <span className="font-bold text-amber-400">26%</span>
-                </div>
-                <div className="w-full bg-[#172238] h-2 rounded-full overflow-hidden">
-                  <div className="bg-amber-400 h-full w-[26%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between py-1 text-slate-300">
-                  <span>Vector Memory Poisoning</span>
-                  <span className="font-bold text-purple-400">16%</span>
-                </div>
-                <div className="w-full bg-[#172238] h-2 rounded-full overflow-hidden">
-                  <div className="bg-[#737ccf] h-full w-[16%]" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between py-1 text-slate-300">
-                  <span>Malformed Tool Payload</span>
-                  <span className="font-bold text-cyan-400">10%</span>
-                </div>
-                <div className="w-full bg-[#172238] h-2 rounded-full overflow-hidden">
-                  <div className="bg-cyan-400 h-full w-[10%]" />
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>

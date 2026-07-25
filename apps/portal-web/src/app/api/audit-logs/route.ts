@@ -33,7 +33,7 @@ export async function GET() {
       ];
       const decisions = ["ALLOW", "BLOCK", "SANITIZE", "QUARANTINE", "ALLOW"];
 
-      const logs = result.rows.map((row, index) => {
+      const logs = result.rows.map((row: any, index: number) => {
         const decision = decisions[index % decisions.length];
         const tool = toolNames[index % toolNames.length];
         

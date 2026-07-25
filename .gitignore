@@ -12,4 +12,5 @@ htmlcov/
 package-lock.json
 *.egg-info/
 .venv/
+*.tsbuildinfo
 
