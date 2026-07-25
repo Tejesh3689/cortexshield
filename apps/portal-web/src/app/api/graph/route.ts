@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import neo4j from "neo4j-driver";
 
+// Always re-fetch from Neo4j — never serve a cached response
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const uri = process.env.NEO4J_URI || "neo4j+ssc://744ad83e.databases.neo4j.io";
   const user = process.env.NEO4J_USER || "744ad83e";

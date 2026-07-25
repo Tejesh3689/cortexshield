@@ -232,7 +232,7 @@ export default function MemoryGraphView() {
   const fetchGraphData = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch("/api/graph");
+      const res = await fetch(`/api/graph?t=${Date.now()}`, { cache: "no-store" });
       const json = await res.json();
 
       if (json.success && json.nodes && json.nodes.length > 0) {
@@ -259,13 +259,19 @@ export default function MemoryGraphView() {
     setIsMounted(true);
     fetchGraphData();
 
+    // Auto-poll every 10 seconds so new edges from MCP/add_memory appear without manual refresh
+    const pollInterval = setInterval(fetchGraphData, 10_000);
+
     const timer = setTimeout(() => {
       if (fgRef.current) {
         fgRef.current.zoomToFit(600, 50);
       }
     }, 400);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(pollInterval);
+    };
   }, [fetchGraphData]);
 
   // Legend Dragging Logic
