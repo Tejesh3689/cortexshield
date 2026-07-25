@@ -128,6 +128,7 @@ deny[msg] {
 ];
 
 export default function PoliciesPage() {
+  const [mounted, setMounted] = useState(false);
   const [policies, setPolicies] = useState<PolicyRule[]>(MOCK_POLICIES);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -166,8 +167,20 @@ export default function PoliciesPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="p-6 md:p-8 space-y-6 bg-[#090d16] min-h-screen text-slate-100 font-sans select-none flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-slate-800 border-t-[#737ccf] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 md:p-8 space-y-6 bg-[#090d16] min-h-screen text-slate-100 font-sans select-none">
+    <div className="p-6 md:p-8 space-y-6 bg-[#090d16] min-h-screen text-slate-100 font-sans select-none" suppressHydrationWarning>
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1b273d] pb-6">
         <div className="flex items-center gap-3">

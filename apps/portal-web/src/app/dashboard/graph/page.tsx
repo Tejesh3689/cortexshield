@@ -390,8 +390,16 @@ export default function MemoryGraphView() {
     ctx.fillText(label, node.x, node.y + radius + 4 + bckgDimensions[1] / 2);
   };
 
+  if (!isMounted) {
+    return (
+      <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-slate-800 border-t-[#10b981] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans">
+    <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans" suppressHydrationWarning>
       {/* Top Floating Control Bar */}
       <div className="absolute top-4 left-6 right-6 z-20 flex flex-wrap items-center justify-between gap-4 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3 rounded-2xl shadow-xl">
         <div className="flex items-center gap-3">

@@ -54,6 +54,7 @@ interface ThreatVector {
 }
 
 export default function DashboardOverview() {
+  const [mounted, setMounted] = useState(false);
   const [timeframe, setTimeframe] = useState("24h");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,12 +161,24 @@ export default function DashboardOverview() {
     return () => clearInterval(interval);
   }, [timeframe, fetchOverviewData]);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const handleRefresh = () => {
     fetchOverviewData(timeframe);
   };
 
+  if (!mounted) {
+    return (
+      <div className="p-6 md:p-8 space-y-8 bg-[#090d16] min-h-screen text-slate-100 font-sans select-none flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-slate-800 border-t-[#5cd3c1] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6 md:p-8 space-y-8 bg-[#090d16] min-h-screen text-slate-100 font-sans select-none">
+    <div className="p-6 md:p-8 space-y-8 bg-[#090d16] min-h-screen text-slate-100 font-sans select-none" suppressHydrationWarning>
       {/* Top Header & Defense Status Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#1b273d] pb-6">
         <div>

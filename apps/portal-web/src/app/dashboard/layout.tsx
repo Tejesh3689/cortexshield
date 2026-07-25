@@ -7,15 +7,17 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const isClerkConfigured = Boolean(
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.startsWith("pk_test_") &&
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.length > 30
+    key &&
+      key.startsWith("pk_") &&
+      !key.includes("placeholder") &&
+      key.length > 30
   );
 
   return (
-    <div className="flex h-screen bg-slate-950">
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+    <div className="flex h-screen bg-slate-950" suppressHydrationWarning>
+      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col" suppressHydrationWarning>
         <div className="p-4 border-b border-slate-800">
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             <Shield className="text-blue-500" /> CortexShield
@@ -35,7 +37,7 @@ export default function DashboardLayout({
             <Shield size={18} /> Policies
           </Link>
         </nav>
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800" suppressHydrationWarning>
           {isClerkConfigured ? (
             <UserButton showName />
           ) : (
