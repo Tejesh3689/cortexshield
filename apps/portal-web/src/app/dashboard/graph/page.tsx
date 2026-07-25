@@ -775,6 +775,14 @@ export default function MemoryGraphView() {
     }
   };
 
+  if (!isMounted) {
+    return (
+      <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-slate-800 border-t-emerald-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans">
       {/* Offline Banner Overlay */}

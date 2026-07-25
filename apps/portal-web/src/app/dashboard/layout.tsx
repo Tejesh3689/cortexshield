@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { Activity, Shield, Network, FileText } from "lucide-react";
+import { Activity, Shield, Network, FileText, ShieldCheck } from "lucide-react";
 
 export default function DashboardLayout({
   children,
@@ -35,6 +35,9 @@ export default function DashboardLayout({
           </Link>
           <Link href="/dashboard/policies" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
             <Shield size={18} /> Policies
+          </Link>
+          <Link href="/dashboard/compliance" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
+            <ShieldCheck size={18} /> Compliance
           </Link>
         </nav>
         <div className="p-4 border-t border-slate-800" suppressHydrationWarning>

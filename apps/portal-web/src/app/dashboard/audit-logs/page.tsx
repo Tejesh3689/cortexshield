@@ -17,9 +17,10 @@ import {
   RefreshCw,
   Eye,
   Link as LinkIcon,
-  Clock,
   Sparkles,
-  ArrowDown
+  ArrowDown,
+  GitMerge,
+  SearchCode
 } from "lucide-react";
 
 export interface AuditLogRow {
@@ -105,6 +106,8 @@ export default function AuditLogsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [dataSource, setDataSource] = useState<string>("Neon Postgres (Live Ledger)");
+  const [provenanceData, setProvenanceData] = useState<any>(null);
+  const [isTracing, setIsTracing] = useState(false);
 
   const fetchAuditLogs = useCallback(async () => {
     setIsRefreshing(true);
@@ -175,6 +178,25 @@ export default function AuditLogsPage() {
   }, [auditLogs, searchQuery]);
 
 
+
+  const handleTrace = async (logId: string) => {
+    setIsTracing(true);
+    setProvenanceData(null);
+    try {
+      const res = await fetch(`/api/audit/provenance/${logId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setProvenanceData(data);
+      } else {
+        setProvenanceData({ error: 'Provenance not found or no AI decision linked.' });
+      }
+    } catch (err) {
+      console.error(err);
+      setProvenanceData({ error: 'Failed to fetch provenance.' });
+    } finally {
+      setIsTracing(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -334,6 +356,7 @@ export default function AuditLogsPage() {
                     <th className="p-3.5 font-bold">Current Block Hash (this_hash)</th>
                     <th className="p-3.5 font-bold">Previous Block Hash (prev_hash)</th>
                     <th className="p-3.5 font-bold text-center">Chain Link</th>
+                    <th className="p-3.5 font-bold text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#172238] text-slate-300">
@@ -418,6 +441,19 @@ export default function AuditLogsPage() {
                             }
                           })()}
                         </td>
+
+                        <td className="p-3.5 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLog(log);
+                              handleTrace(log.id);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-900/30 border border-cyan-500/30 hover:bg-cyan-900/50 text-cyan-300 rounded text-[10px] font-bold uppercase transition-all"
+                          >
+                            <SearchCode size={12} /> Trace
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -492,6 +528,43 @@ export default function AuditLogsPage() {
                   {selectedLog.payloadSnippet}
                 </pre>
               </div>
+
+              {/* Provenance Visualization */}
+              {isTracing ? (
+                 <div className="text-center text-cyan-400 text-xs py-4 flex items-center justify-center gap-2">
+                   <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /> Tracing...
+                 </div>
+              ) : provenanceData && !provenanceData.error ? (
+                 <div className="bg-[#080d1a] border border-[#1b273d] p-4 rounded-xl space-y-3 mt-4">
+                   <div className="flex items-center justify-between border-b border-[#172238] pb-2">
+                     <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                       <GitMerge size={12} className="text-[#10b981]" /> AI Decision Provenance Trace
+                     </span>
+                   </div>
+                   
+                   <div className="relative border-l-2 border-[#10b981] ml-2 pl-4 py-2 space-y-4 text-[11px] font-mono">
+                     <div className="relative">
+                       <div className="absolute -left-[23px] top-1 w-3 h-3 rounded-full bg-[#10b981]" />
+                       <p className="text-white font-bold">{provenanceData.decision.decision} Decision</p>
+                       <p className="text-slate-400 text-[10px]">Reason: {provenanceData.decision.reason}</p>
+                     </div>
+                     
+                     {provenanceData.provenance_chain?.map((link: any, idx: number) => (
+                       <div key={idx} className="relative">
+                         <div className="absolute -left-[23px] top-1 w-3 h-3 rounded-full bg-cyan-500" />
+                         <p className="text-cyan-400 font-bold">Influenced by {link.fact_type}</p>
+                         <p className="text-slate-400 text-[10px]">Trust contribution: {link.trust_contribution?.toFixed(2)}</p>
+                         <p className="text-emerald-400 text-[10px]">Extracted from: {link.source_type} ({link.source_document})</p>
+                         <p className="text-slate-500 text-[10px]">Arrived via: {link.arrived_via}</p>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+              ) : provenanceData?.error ? (
+                <div className="bg-red-950/30 border border-red-500/30 p-3 rounded-xl mt-4">
+                  <p className="text-red-400 text-[10px]">{provenanceData.error}</p>
+                </div>
+              ) : null}
             </div>
           ) : (
             <p className="text-slate-500 text-xs">Select any audit log row to inspect cryptographic details.</p>

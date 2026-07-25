@@ -36,6 +36,19 @@ async def sanitize_tool_response(response: ToolCallResponse, tenant_id: str, age
             f"reason={decision.reason}"
         )
 
+        import hashlib
+        from ..db import async_session_maker
+        from cortex_db.hash_chain import append_audit_log
+        async with async_session_maker() as session:
+            await append_audit_log(
+                session=session,
+                tenant_id=tenant_id,
+                event_type="egress_blocked",
+                event_ref=f"egress_{hashlib.md5((agent_id + tool_name + str(datetime.utcnow())).encode()).hexdigest()}",
+                payload=decision.model_dump(mode="json")
+            )
+
+
         # 3. Apply Policy
         if action == "hard-fail":
             # Strip payload entirely and return explicit error

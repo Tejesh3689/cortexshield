@@ -45,6 +45,9 @@ class UsageCounter(Base):
     period_start = Column(DateTime, primary_key=True)
     operation_count = Column(Integer, default=0)
     tool_call_count = Column(Integer, default=0)
+    memory_write_count = Column(Integer, default=0)
+    firewall_deny_count = Column(Integer, default=0)
+    poison_detection_count = Column(Integer, default=0)
     reported = Column(Boolean, default=False)
 
 class AuditLogIndex(Base):
@@ -56,3 +59,13 @@ class AuditLogIndex(Base):
     prev_hash = Column(String(64), nullable=True)
     this_hash = Column(String(64), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class ComplianceReport(Base):
+    __tablename__ = "compliance_reports"
+    id = Column(String(255), primary_key=True)
+    tenant_id = Column(String(255), ForeignKey("tenants.id"), nullable=False)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    report_hash = Column(String(255), nullable=False)
+    generated_at = Column(DateTime, default=datetime.utcnow)
+    regulatory_frameworks = Column(JSONB, nullable=True)

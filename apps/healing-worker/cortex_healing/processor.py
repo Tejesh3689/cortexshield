@@ -17,8 +17,10 @@ from .extraction.llm_triplet_extractor import extract_triplets, check_poison
 from .extraction.entity_resolution import resolve_entities
 from .graph.contradiction_healer import heal_graph
 from .graph.cycle_detector import detect_and_break_cycles
+from opentelemetry import trace
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer("cortex_healing")
 
 # In-process dedup set. Bounded by process lifetime; sufficient for hackathon
 # single-process deployment. In the full NATS architecture, Redis setnx
@@ -57,7 +59,21 @@ async def process_memory_write_job(job: MemoryWriteJob) -> None:
         resolved_triplets = await resolve_entities(triplets)
 
         # Step 3: Graph Healing (Supersession)
-        await heal_graph(job.tenant_id, resolved_triplets, trust_score, is_poison)
+        with tracer.start_as_current_span("healing.cypher.write") as span:
+            span.set_attribute("tenant_id", job.tenant_id)
+            await heal_graph(
+                tenant_id=job.tenant_id,
+                triplets=resolved_triplets,
+                trust_score=trust_score,
+                is_poison=is_poison,
+                source_type=job.source_type,
+                document_hash=job.document_hash,
+                origin_source=job.origin_source.value,
+                agent_id=job.agent_id,
+                tool_name=job.tool_name,
+                request_id=job.request_id,
+                doc_id=job.doc_id
+            )
 
         # Step 4: Cycle Detection & Breaking
         await detect_and_break_cycles(job.tenant_id)

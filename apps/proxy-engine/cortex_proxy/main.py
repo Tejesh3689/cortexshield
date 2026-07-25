@@ -2,10 +2,12 @@ from contextlib import asynccontextmanager
 import hashlib
 import os
 import uuid
-from fastapi import FastAPI, Request, Header, HTTPException, Depends, Query
+from fastapi import FastAPI, Request, Header, HTTPException, Depends, Query, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import logging
+import time
+import redis.asyncio as aioredis
 from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,14 @@ from neo4j import GraphDatabase
 
 # Load env vars before doing anything else
 from pathlib import Path
+import time
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from starlette.middleware.base import BaseHTTPMiddleware
 service_dir = Path(__file__).resolve().parent.parent
 repo_root = service_dir.parent.parent
 load_dotenv(repo_root / ".env")
@@ -20,6 +30,7 @@ load_dotenv(service_dir / ".env", override=True)
 
 from .ingress.jsonrpc_interceptor import process_jsonrpc
 from .db import get_db_session
+from .compliance.router import router as compliance_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("proxy-engine")
@@ -31,16 +42,40 @@ async def lifespan(app: FastAPI):
     logger.info("Proxy-Engine shutting down...")
 
 app = FastAPI(title="CortexShield Proxy Engine", lifespan=lifespan)
+app.include_router(compliance_router, prefix="/v1/compliance")
 
-async def verify_api_key(
-    request: Request,
-    db: AsyncSession = Depends(get_db_session)
-) -> bool:
-    """
-    Validates API key from Header (Authorization: Bearer <key>, X-API-Key) or Query Param (api_key, key).
-    Queries the api_keys table in Postgres, compares against key_hash (SHA-256), and confirms revoked_at IS NULL.
-    Returns 401 Unauthorized if the key doesn't match any active row.
-    """
+# --- OpenTelemetry & Prometheus Setup ---
+resource = Resource(attributes={"service.name": "proxy-engine"})
+trace_provider = TracerProvider(resource=resource)
+otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+if otlp_endpoint:
+    exporter = OTLPSpanExporter(endpoint=f"{otlp_endpoint}/v1/traces")
+else:
+    exporter = ConsoleSpanExporter()
+trace_provider.add_span_processor(BatchSpanProcessor(exporter))
+trace.set_tracer_provider(trace_provider)
+tracer = trace.get_tracer("proxy-engine")
+
+REQ_TOTAL = Counter("cortexshield_requests_total", "Total requests", ["tenant_id", "tool_name", "decision"])
+REQ_DURATION = Histogram("cortexshield_request_duration_ms", "Request duration ms")
+POISON_TOTAL = Counter("cortexshield_poison_detections_total", "Poison detections", ["tenant_id"])
+DENY_TOTAL = Counter("cortexshield_firewall_denials_total", "Firewall denials", ["tenant_id", "tool_name"])
+
+class OTelMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if not request.url.path.startswith("/rpc") and not request.url.path.startswith("/v1/tools/call"):
+            return await call_next(request)
+            
+        request.state.start_time = time.time()
+        with tracer.start_as_current_span("proxy.request") as span:
+            request.state.proxy_span = span
+            return await call_next(request)
+
+app.add_middleware(OTelMiddleware)
+
+redis_client = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True, health_check_interval=30, socket_keepalive=True)
+
+async def check_rate_limit(request: Request, response: Response, db: AsyncSession = Depends(get_db_session)):
     api_key = request.headers.get("x-api-key") or request.headers.get("api-key")
     if not api_key:
         auth_header = request.headers.get("authorization")
@@ -50,18 +85,86 @@ async def verify_api_key(
         api_key = request.query_params.get("api_key") or request.query_params.get("key")
 
     if not api_key:
-        raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+        return  # Let auth handle missing key
 
     key_hash = hashlib.sha256(api_key.strip().encode("utf-8")).hexdigest()
 
     result = await db.execute(
-        text("SELECT id FROM api_keys WHERE key_hash = :key_hash AND revoked_at IS NULL"),
+        text("SELECT t.tier FROM tenants t JOIN api_keys a ON t.id = a.tenant_id WHERE a.key_hash = :key_hash AND a.revoked_at IS NULL"),
         {"key_hash": key_hash}
     )
     row = result.fetchone()
     if not row:
-        raise HTTPException(status_code=401, detail="Unauthorized: Invalid or revoked API key")
-    return True
+        return  # Let auth handle invalid key
+
+    tier = row[0]
+    if tier == "enterprise":
+        limit = -1
+    elif tier == "growth":
+        limit = 1000
+    else:
+        limit = 100
+
+    if limit == -1:
+        return
+
+    current_minute = int(time.time() // 60)
+    redis_key = f"rate_limit:{key_hash}:{current_minute}"
+
+    async with redis_client.pipeline(transaction=True) as pipe:
+        pipe.incr(redis_key)
+        pipe.expire(redis_key, 60)
+        res = await pipe.execute()
+
+    current_count = res[0]
+    remaining = max(0, limit - current_count)
+
+    response.headers["X-RateLimit-Limit"] = str(limit)
+    response.headers["X-RateLimit-Remaining"] = str(remaining)
+
+    if current_count > limit:
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded",
+            headers={
+                "Retry-After": "60",
+                "X-RateLimit-Limit": str(limit),
+                "X-RateLimit-Remaining": str(remaining)
+            }
+        )
+
+async def verify_api_key(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session)
+) -> str:
+    """
+    Validates API key from Header (Authorization: Bearer <key>, X-API-Key) or Query Param (api_key, key).
+    Queries the api_keys table in Postgres, compares against key_hash (SHA-256), and confirms revoked_at IS NULL.
+    Returns 401 Unauthorized if the key doesn't match any active row.
+    """
+    with tracer.start_as_current_span("proxy.auth") as span:
+        api_key = request.headers.get("x-api-key") or request.headers.get("api-key")
+        if not api_key:
+            auth_header = request.headers.get("authorization")
+            if auth_header and auth_header.lower().startswith("bearer "):
+                api_key = auth_header[7:].strip()
+        if not api_key:
+            api_key = request.query_params.get("api_key") or request.query_params.get("key")
+
+        if not api_key:
+            raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+
+        key_hash = hashlib.sha256(api_key.strip().encode("utf-8")).hexdigest()
+
+        result = await db.execute(
+            text("SELECT id, tenant_id FROM api_keys WHERE key_hash = :key_hash AND revoked_at IS NULL"),
+            {"key_hash": key_hash}
+        )
+        row = result.fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Unauthorized: Invalid or revoked API key")
+        span.set_attribute("tenant_id", row[1])
+        return row[1]  # Return the tenant_id
 
 @app.post("/v1/tools/call")
 @app.post("/rpc")
@@ -71,14 +174,19 @@ async def handle_tool_call(
     header_agent_id: str = Header(None, alias="x-agent-id"),
     query_tenant_id: str = Query(None, alias="tenant_id"),
     query_agent_id: str = Query(None, alias="agent_id"),
-    _auth: bool = Depends(verify_api_key)
+    _rate_limit: None = Depends(check_rate_limit),
+    db_tenant_id: str = Depends(verify_api_key),
+    db: AsyncSession = Depends(get_db_session)
 ):
     # Fallback logic for tenant and agent IDs
-    tenant_id = query_tenant_id or header_tenant_id
+    caller_tenant_id = query_tenant_id or header_tenant_id
+    if caller_tenant_id and caller_tenant_id != db_tenant_id:
+        logger.warning(f"Caller supplied tenant_id {caller_tenant_id} does not match DB tenant_id {db_tenant_id}. Forcing DB tenant_id.")
+        
+    tenant_id = db_tenant_id
     agent_id = query_agent_id or header_agent_id
     
-    if not tenant_id:
-        raise HTTPException(status_code=400, detail="Missing tenant_id (header or query)")
+    # We no longer check if tenant_id is missing since db_tenant_id is guaranteed by verify_api_key
     if not agent_id:
         raise HTTPException(status_code=400, detail="Missing agent_id (header or query)")
 
@@ -93,6 +201,55 @@ async def handle_tool_call(
 
     try:
         response_dict = await process_jsonrpc(data, tenant_id, agent_id)
+        
+        tool_name = data.get("params", {}).get("name", "unknown")
+        
+        if hasattr(request.state, "proxy_span"):
+            request.state.proxy_span.set_attribute("tenant_id", tenant_id)
+            request.state.proxy_span.set_attribute("tool_name", tool_name)
+            
+        is_memory = 1 if tool_name in ("add_memory", "process_document", "fetch_document") else 0
+        
+        is_deny = 0
+        is_poison = 0
+        result_content = response_dict.get("result", {}).get("content", [])
+        if result_content and isinstance(result_content, list) and len(result_content) > 0:
+            text_resp = result_content[0].get("text", "")
+            if "FIREWALL DENY:" in text_resp:
+                is_deny = 1
+            if "EGRESS BLOCKED:" in text_resp:
+                is_poison = 1
+
+        upsert_query = text("""
+            INSERT INTO usage_counters (tenant_id, period_start, operation_count, tool_call_count, memory_write_count, firewall_deny_count, poison_detection_count)
+            VALUES (:tenant_id, date_trunc('hour', now()), 1, 1, :is_memory, :is_deny, :is_poison)
+            ON CONFLICT (tenant_id, period_start)
+            DO UPDATE SET
+                operation_count = usage_counters.operation_count + 1,
+                tool_call_count = usage_counters.tool_call_count + 1,
+                memory_write_count = usage_counters.memory_write_count + EXCLUDED.memory_write_count,
+                firewall_deny_count = usage_counters.firewall_deny_count + EXCLUDED.firewall_deny_count,
+                poison_detection_count = usage_counters.poison_detection_count + EXCLUDED.poison_detection_count;
+        """)
+        await db.execute(upsert_query, {
+            "tenant_id": tenant_id,
+            "is_memory": is_memory,
+            "is_deny": is_deny,
+            "is_poison": is_poison
+        })
+        await db.commit()
+        
+        # Prometheus metrics
+        decision = "DENY" if is_deny else "ALLOW"
+        if is_deny:
+            DENY_TOTAL.labels(tenant_id=tenant_id, tool_name=tool_name).inc()
+        if is_poison:
+            POISON_TOTAL.labels(tenant_id=tenant_id).inc()
+        REQ_TOTAL.labels(tenant_id=tenant_id, tool_name=tool_name, decision=decision).inc()
+        
+        if hasattr(request.state, "start_time"):
+            REQ_DURATION.observe((time.time() - request.state.start_time) * 1000.0)
+
         return JSONResponse(content=response_dict)
     except Exception as e:
         logger.error(f"Error processing JSON-RPC: {e}", exc_info=True)
@@ -102,9 +259,59 @@ async def handle_tool_call(
         )
 
 @app.get("/health")
-async def health_check():
-    return {"status": "ok", "service": "proxy-engine"}
+async def health_check(db: AsyncSession = Depends(get_db_session)):
+    import asyncio
+    health_status = {"status": "healthy", "postgres": "error", "neo4j": "error", "redis": "error"}
+    
+    # 1. Check Redis
+    try:
+        await redis_client.ping()
+        health_status["redis"] = "ok"
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}")
+        health_status["status"] = "unhealthy"
 
+    # 2. Check Postgres
+    try:
+        await db.execute(text("SELECT 1"))
+        health_status["postgres"] = "ok"
+    except Exception as e:
+        logger.error(f"Postgres health check failed: {e}")
+        health_status["status"] = "unhealthy"
+
+    # 3. Check Neo4j
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    if neo4j_uri.startswith("neo4j+s://"):
+        neo4j_uri = neo4j_uri.replace("neo4j+s://", "neo4j+ssc://", 1)
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "localdevpassword")
+
+    try:
+        driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+        await asyncio.to_thread(driver.verify_connectivity)
+        driver.close()
+        health_status["neo4j"] = "ok"
+    except Exception as e:
+        logger.error(f"Neo4j health check failed: {e}")
+        health_status["status"] = "unhealthy"
+
+    status_code = 200 if health_status["status"] == "healthy" else 503
+    return JSONResponse(status_code=status_code, content=health_status)
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+@app.websocket("/ws/graph")
+async def websocket_endpoint(websocket: WebSocket, tenant: str = Query(None)):
+    await websocket.accept()
+    try:
+        while True:
+            # Just keep the connection alive. In a real system, you would 
+            # broadcast {"type": "graph_update"} when Neo4j changes occur.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
 
 # ── Remediation Endpoint ──────────────────────────────────────────────────────
 
@@ -119,19 +326,20 @@ async def heal_edge(
     query_tenant_id: str = Query(None, alias="tenant_id"),
     query_agent_id: str = Query(None, alias="agent_id"),
     db: AsyncSession = Depends(get_db_session),
-    _auth: bool = Depends(verify_api_key)
+    _rate_limit: None = Depends(check_rate_limit),
+    _db_tenant_id: str = Depends(verify_api_key)
 ):
     """
     Administrative override: marks a specific Neo4j relationship as SUPERSEDED
     by its elementId. Intended for the 'Remediate Poisoned Edge' demo button.
     """
-    tenant_id = query_tenant_id or header_tenant_id
-    agent_id = query_agent_id or header_agent_id
+    tenant_id = query_tenant_id or header_tenant_id or _db_tenant_id
+    agent_id = query_agent_id or header_agent_id or "portal-dashboard"
     
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="Missing tenant_id (header or query)")
+        raise HTTPException(status_code=400, detail="Missing tenant_id")
     if not agent_id:
-        raise HTTPException(status_code=400, detail="Missing agent_id (header or query)")
+        raise HTTPException(status_code=400, detail="Missing agent_id")
 
     edge_id = body.edge_element_id.strip()
     logger.info(f"heal_edge called for elementId={edge_id!r}")

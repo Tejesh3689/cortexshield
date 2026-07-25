@@ -35,6 +35,9 @@ TRANSITION_SCORES: dict[tuple, float] = {
     ("read_env_secrets", "send_webhook"):  0.05,
     ("db_query",         "send_webhook"):  0.05,
     ("query_user_db",    "send_webhook"):  0.05,
+    ("read_env_secrets", "send_webhook_internal"):  0.05,
+    ("db_query",         "send_webhook_internal"):  0.05,
+    ("query_user_db",    "send_webhook_internal"):  0.05,
 }
 
 READ_TOOLS = frozenset({
@@ -59,7 +62,7 @@ def get_redis() -> redis.Redis:
 def _score_transition(last_tool: Optional[str], current_tool: str,
                       history: list[str]) -> tuple[float, str]:
     # Compound rule: send_webhook after 2+ reads in recent history
-    if current_tool == "send_webhook" and last_tool is not None:
+    if current_tool.startswith("send_webhook") and last_tool is not None:
         recent_reads = sum(1 for t in history[-5:] if t in READ_TOOLS)
         if recent_reads >= 2:
             return 0.02, f"Suspicious: {recent_reads} read ops then send_webhook"

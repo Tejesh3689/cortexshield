@@ -39,14 +39,14 @@ async def get_tenant_database_name(tenant_id: str) -> str:
             tier = row["tier"]
             # Pro tenants share the default database
             if tier == "pro":
-                db_name = "neo4j"
+                db_name = None
                 
             _tenant_db_cache[tenant_id] = db_name
             return db_name
     except Exception:
         pass
         
-    return "neo4j" # fallback default
+    return None # fallback default
 
 async def get_tenant_session(tenant_id: str, driver: Driver = None):
     """
@@ -58,4 +58,42 @@ async def get_tenant_session(tenant_id: str, driver: Driver = None):
         driver = get_driver()
         
     db_name = await get_tenant_database_name(tenant_id)
-    return driver.session(database=db_name)
+    return driver.session(database=db_name) if db_name else driver.session()
+
+async def get_decision_provenance(decision_id: str, tenant_id: str) -> dict:
+    """Returns the full provenance chain for a firewall decision."""
+    cypher = """
+    MATCH (d:AuditDecision {tenant_id: $tenant})
+    WHERE d.id = $decision_id OR d.audit_log_ref = $decision_id
+    OPTIONAL MATCH (d)-[ib:INFLUENCED_BY]->(s:Entity)-[ef:EXTRACTED_FROM]->(doc:SourceDocument)-[:ARRIVED_VIA]->(tc:ToolCall)
+    WHERE ib.fact_type = ef.fact_type
+    RETURN d as decision,
+           collect({
+             fact_type: ib.fact_type,
+             trust_contribution: ib.trust_contribution,
+             source_document: doc.id,
+             source_type: doc.source_type,
+             arrived_via: tc.tool_name,
+             received_at: doc.received_at
+           }) as provenance_chain
+    """
+    
+    driver = get_driver()
+    db_name = await get_tenant_database_name(tenant_id)
+    
+    # We must use the synchronous API properly here since driver is sync.
+    # We can run it in a thread or just execute synchronously for the hackathon.
+    with (driver.session(database=db_name) if db_name else driver.session()) as session:
+        result = session.run(cypher, decision_id=decision_id, tenant=tenant_id)
+        record = result.single()
+        if not record:
+            return None
+            
+        decision_node = record["decision"]
+        if not decision_node:
+            return None
+            
+        return {
+            "decision": dict(decision_node),
+            "provenance_chain": record["provenance_chain"]
+        }

@@ -1,5 +1,6 @@
 import json
-from .memory_ingest_fastpath import handle_add_memory
+from .memory_ingest_fastpath import handle_add_memory, handle_process_document, handle_fetch_document
+from .memory_read import handle_get_memory, handle_search_memory
 from ..firewall.action_firewall import decide
 from ..egress.response_sanitizer import sanitize_tool_response
 from cortex_schemas.models import ToolCallRequest, ToolCallResponse
@@ -65,6 +66,51 @@ async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> 
                                 "text": {"type": "string", "description": "The fact or memory text to store."}
                             },
                             "required": ["text"]
+                        }
+                    },
+                    {
+                        "name": "process_document",
+                        "description": "Store an untrusted document into CortexShield cognitive memory graph.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "document_text": {"type": "string", "description": "The full text of the untrusted document."}
+                            },
+                            "required": ["document_text"]
+                        }
+                    },
+                    {
+                        "name": "fetch_document",
+                        "description": "Fetch and process an external document or URL payload.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "document_url": {"type": "string", "description": "The URL of the fetched document."},
+                                "document_content": {"type": "string", "description": "The actual text content of the document."}
+                            },
+                            "required": ["document_url", "document_content"]
+                        }
+                    },
+                    {
+                        "name": "get_memory",
+                        "description": "Retrieve exact stored facts for a specific entity subject.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "subject": {"type": "string", "description": "The entity subject ID (e.g. 'user', 'apple')"}
+                            },
+                            "required": ["subject"]
+                        }
+                    },
+                    {
+                        "name": "search_memory",
+                        "description": "Perform a semantic or text search over the knowledge graph.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string", "description": "The search query text"}
+                            },
+                            "required": ["query"]
                         }
                     },
                     {
@@ -145,6 +191,27 @@ The connector is now available for monitoring, memory analysis, and security aud
             
         if tool_name == "add_memory":
             response = await handle_add_memory(req, tenant_id, agent_id)
+            safe_response = await sanitize_tool_response(response, tenant_id, agent_id, tool_name)
+            return safe_response.model_dump(exclude_none=True)
+            
+        if tool_name == "process_document":
+            response = await handle_process_document(req, tenant_id, agent_id)
+            safe_response = await sanitize_tool_response(response, tenant_id, agent_id, tool_name)
+            return safe_response.model_dump(exclude_none=True)
+            
+        if tool_name == "fetch_document":
+            response = await handle_fetch_document(req, tenant_id, agent_id)
+            # handle_fetch_document ALREADY invokes sanitize_tool_response internally
+            # to check the payload first as requested, and returns a ToolCallResponse.
+            return response.model_dump(exclude_none=True)
+            
+        if tool_name == "get_memory":
+            response = await handle_get_memory(req, tenant_id, agent_id)
+            safe_response = await sanitize_tool_response(response, tenant_id, agent_id, tool_name)
+            return safe_response.model_dump(exclude_none=True)
+            
+        if tool_name == "search_memory":
+            response = await handle_search_memory(req, tenant_id, agent_id)
             safe_response = await sanitize_tool_response(response, tenant_id, agent_id, tool_name)
             return safe_response.model_dump(exclude_none=True)
             

@@ -7,7 +7,10 @@ from cortex_schemas.models import Triplet, EdgeStatus
 logger = logging.getLogger(__name__)
 
 
-async def heal_graph(tenant_id: str, triplets: List[Triplet], trust_score: float, is_poison: bool):
+async def heal_graph(tenant_id: str, triplets: List[Triplet], trust_score: float, is_poison: bool,
+                     source_type: str = "unknown", document_hash: str = None, 
+                     origin_source: str = "unknown", agent_id: str = None, 
+                     tool_name: str = None, request_id: str = None, doc_id: str = None):
     driver = get_driver()
     status = EdgeStatus.FLAGGED_POISON if is_poison or trust_score < 0.1 else EdgeStatus.ACTIVE
 
@@ -38,7 +41,7 @@ async def heal_graph(tenant_id: str, triplets: List[Triplet], trust_score: float
         trust_score: $trust_score,
         created_at: datetime()
     }, o) YIELD rel
-    RETURN count(rel)
+    RETURN elementId(rel) as rel_id
     """
 
     with driver.session() as session:
@@ -53,13 +56,47 @@ async def heal_graph(tenant_id: str, triplets: List[Triplet], trust_score: float
         logger.info(f"With parameters: {params}")
 
         result = session.run(query, **params)
-        summary = result.consume()
-        logger.info(
-            f"Neo4j write summary: "
-            f"Nodes created: {summary.counters.nodes_created}, "
-            f"Relationships created: {summary.counters.relationships_created}, "
-            f"Properties set: {summary.counters.properties_set}"
-        )
+        rel_ids = [record["rel_id"] for record in result]
+        
+        logger.info(f"Neo4j write complete, created rel_ids: {rel_ids}")
+
+        if doc_id and rel_ids:
+            doc_query = """
+            MERGE (doc:SourceDocument {id: $doc_id})
+            ON CREATE SET 
+                doc.tenant_id = $tenant_id,
+                doc.source_type = $source_type,
+                doc.document_hash = $document_hash,
+                doc.origin = $origin_source,
+                doc.received_at = datetime(),
+                doc.processing_agent_id = $agent_id
+            
+            MERGE (tc:ToolCall {id: $request_id})
+            ON CREATE SET 
+                tc.tenant_id = $tenant_id,
+                tc.tool_name = $tool_name,
+                tc.called_at = datetime(),
+                tc.agent_id = $agent_id
+            
+            MERGE (doc)-[:ARRIVED_VIA]->(tc)
+            
+            WITH doc
+            UNWIND $rel_ids AS r_id
+            MATCH (s)-[r]->(o) WHERE elementId(r) = r_id
+            MERGE (s)-[:EXTRACTED_FROM {fact_type: type(r)}]->(doc)
+            """
+            session.run(doc_query, {
+                "doc_id": doc_id,
+                "tenant_id": tenant_id,
+                "source_type": source_type,
+                "document_hash": document_hash,
+                "origin_source": origin_source,
+                "agent_id": agent_id,
+                "request_id": request_id,
+                "tool_name": tool_name,
+                "rel_ids": rel_ids
+            })
+            logger.info(f"Linked {len(rel_ids)} facts to SourceDocument {doc_id} and ToolCall {request_id}")
 
     # ── Post-write: Broadcast to realtime-gateway ──────────────────────────
     # Fire-and-forget HTTP POST — gateway down never blocks healing.

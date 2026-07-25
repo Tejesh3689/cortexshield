@@ -8,6 +8,7 @@ class OriginSource(str, Enum):
     USER_PROMPT = "USER_PROMPT"
     UNTRUSTED_DOC = "UNTRUSTED_DOC"
     WEB_SCRAPE = "WEB_SCRAPE"
+    EXTERNAL_FETCH = "EXTERNAL_FETCH"
 
 class EdgeStatus(str, Enum):
     ACTIVE = "ACTIVE"
@@ -25,6 +26,11 @@ class MemoryWriteJob(BaseModel):
     raw_text: str
     origin_source: OriginSource
     submitted_at: datetime
+    doc_id: Optional[str] = None
+    document_hash: Optional[str] = None
+    source_type: str = "unknown"
+    tool_name: Optional[str] = None
+    request_id: Optional[str] = None
 
 class Triplet(BaseModel):
     subject: str
