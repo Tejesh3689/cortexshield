@@ -1,13 +1,17 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Header, HTTPException, Query
+import hashlib
+from fastapi import FastAPI, Request, Header, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
 import logging
 from dotenv import load_dotenv
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Load env vars before doing anything else
 load_dotenv()
 
 from .ingress.jsonrpc_interceptor import process_jsonrpc
+from .db import get_db_session
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("proxy-engine")
@@ -20,6 +24,37 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CortexShield Proxy Engine", lifespan=lifespan)
 
+async def verify_api_key(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session)
+) -> bool:
+    """
+    Validates API key from Header (Authorization: Bearer <key>, X-API-Key) or Query Param (api_key, key).
+    Queries the api_keys table in Postgres, compares against key_hash (SHA-256), and confirms revoked_at IS NULL.
+    Returns 401 Unauthorized if the key doesn't match any active row.
+    """
+    api_key = request.headers.get("x-api-key") or request.headers.get("api-key")
+    if not api_key:
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            api_key = auth_header[7:].strip()
+    if not api_key:
+        api_key = request.query_params.get("api_key") or request.query_params.get("key")
+
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing API key")
+
+    key_hash = hashlib.sha256(api_key.strip().encode("utf-8")).hexdigest()
+
+    result = await db.execute(
+        text("SELECT id FROM api_keys WHERE key_hash = :key_hash AND revoked_at IS NULL"),
+        {"key_hash": key_hash}
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid or revoked API key")
+    return True
+
 @app.post("/v1/tools/call")
 @app.post("/rpc")
 async def handle_tool_call(
@@ -28,8 +63,7 @@ async def handle_tool_call(
     header_agent_id: str = Header(None, alias="x-agent-id"),
     query_tenant_id: str = Query(None, alias="tenant_id"),
     query_agent_id: str = Query(None, alias="agent_id"),
-    authorization: str = Header(None),
-    api_key: str = Query(None)
+    _auth: bool = Depends(verify_api_key)
 ):
     # Fallback logic for tenant and agent IDs
     tenant_id = query_tenant_id or header_tenant_id
@@ -39,16 +73,10 @@ async def handle_tool_call(
         raise HTTPException(status_code=400, detail="Missing tenant_id (header or query)")
     if not agent_id:
         raise HTTPException(status_code=400, detail="Missing agent_id (header or query)")
-    # Hackathon workaround: accept API key in query param or Authorization header
-    token = api_key
-    if not token and authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
-        
-    if not token or not token.startswith("sk_pro_"):
-        raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API key")
+
     """
     Main ingress endpoint for intercepting tool calls (JSON-RPC format).
-    Requires x-tenant-id and x-agent-id headers.
+    Requires active, non-revoked API key in database and x-tenant-id / x-agent-id headers or query parameters.
     """
     try:
         data = await request.json()
