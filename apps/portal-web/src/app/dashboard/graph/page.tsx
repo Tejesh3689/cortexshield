@@ -1,25 +1,21 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import {
-  Brain,
-  Database,
-  Search,
-  RotateCw,
-  RefreshCw,
-  X,
-  PanelRightOpen,
-  PanelRightClose,
-  Sparkles,
   ShieldAlert,
-  Clock,
+  Database,
+  RefreshCw,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  X,
+  RotateCcw,
+  Zap,
 } from "lucide-react";
 
-// Dynamically import 2D Force Graph to ensure zero SSR/WebGL bundle export issues
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
-  ssr: false,
-});
+// Dynamically import react-force-graph-2d to prevent SSR canvas issues
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
 export interface MemoryNode {
   id: string;
@@ -40,16 +36,53 @@ export interface MemoryNode {
 
 export interface MemoryLink {
   id?: string;
-  source: string | MemoryNode | any;
-  target: string | MemoryNode | any;
-  label?: string;
-  status?: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED";
-  trustScore?: number;
+  source: string | MemoryNode;
+  target: string | MemoryNode;
+  label: string;
+  status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED";
+  trustScore: number;
   curvature?: number;
 }
 
+// Preset cluster positions so graph renders instantly as separated islands (Image 2) without initial central clumping (Image 1)
+const PRESET_CLUSTER_COORDINATES: Record<string, { x: number; y: number }> = {
+  // Cluster 1: user & blue (Bottom Center)
+  user: { x: -30, y: 140 },
+  blue: { x: -120, y: 130 },
+
+  // Cluster 2: user_alice & admin_role (Bottom Right)
+  user_alice: { x: 180, y: 100 },
+  admin_role: { x: 220, y: 160 },
+
+  // Cluster 3: user_bob, sales_dept, engineering_dept (Middle Left)
+  user_bob: { x: -190, y: -20 },
+  sales_dept: { x: -150, y: -100 },
+  engineering_dept: { x: -230, y: 40 },
+
+  // Cluster 4: system_prompt & ignore_previous_instructions (Top Right)
+  system_prompt: { x: 160, y: -160 },
+  ignore_previous_instructions: { x: 240, y: -120 },
+};
+
+function assignPresetCoordinates(nodes: MemoryNode[]): MemoryNode[] {
+  return nodes.map((node, idx) => {
+    const key = node.id || node.label;
+    const preset = PRESET_CLUSTER_COORDINATES[key];
+    if (preset) {
+      return { ...node, x: preset.x, y: preset.y };
+    }
+    const angle = (idx / Math.max(nodes.length, 1)) * 2 * Math.PI;
+    const radius = 180;
+    return {
+      ...node,
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    };
+  });
+}
+
 // Fallback memory nodes seed dataset if API is loading or offline
-const SEED_MEMORY_NODES: MemoryNode[] = [
+const SEED_MEMORY_NODES: MemoryNode[] = assignPresetCoordinates([
   {
     id: "user",
     label: "user (Entity)",
@@ -83,7 +116,7 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     timestamp: "2026-07-25 07:00:00",
     content: "System instruction guardrail root entity.",
   },
-];
+]);
 
 const SEED_MEMORY_LINKS: MemoryLink[] = [
   { source: "user", target: "blue", label: "FAVORITE_COLOR (PRIMARY)", status: "ACTIVE", trustScore: 0.98 },
@@ -117,13 +150,14 @@ export default function MemoryGraphView() {
       const json = await res.json();
 
       if (json.success && json.nodes && json.nodes.length > 0) {
+        const positionedNodes = assignPresetCoordinates(json.nodes);
         setGraphData({
-          nodes: json.nodes,
+          nodes: positionedNodes,
           links: json.links || [],
         });
         setDataSource(json.source || "Neo4j Aura (Live)");
-        if (json.nodes.length > 0) {
-          setSelectedNode(json.nodes[0]);
+        if (positionedNodes.length > 0) {
+          setSelectedNode(positionedNodes[0]);
         }
       } else {
         console.warn("Neo4j API empty or errored, using seed nodes");
@@ -144,9 +178,9 @@ export default function MemoryGraphView() {
 
     const timer = setTimeout(() => {
       if (fgRef.current) {
-        fgRef.current.zoomToFit(800, 60);
+        fgRef.current.zoomToFit(600, 50);
       }
-    }, 800);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [fetchGraphData]);
@@ -196,7 +230,7 @@ export default function MemoryGraphView() {
 
       let curvature = 0;
       if (count > 1) {
-        // Spread curvature symmetrically (-0.28, 0, 0.28)
+        // Distribute curvatures evenly: e.g. for 3 links: -0.28, 0, 0.28
         const step = 0.28;
         const middle = (count - 1) / 2;
         curvature = (index - middle) * step;
@@ -209,18 +243,22 @@ export default function MemoryGraphView() {
     });
   }, [graphData.links, filteredNodes]);
 
-  const handleNodeClick = useCallback((node: any) => {
-    setSelectedNode(node as MemoryNode);
+  // Click Handlers
+  const handleNodeClick = (node: any) => {
+    setSelectedNode(node);
     setSelectedLink(null);
+    setIsDrawerOpen(true);
     if (fgRef.current) {
       fgRef.current.centerAt(node.x, node.y, 800);
-      fgRef.current.zoom(2.4, 800);
+      fgRef.current.zoom(2.5, 800);
     }
-  }, []);
+  };
 
-  const handleLinkClick = useCallback((link: any) => {
-    setSelectedLink(link as MemoryLink);
-  }, []);
+  const handleLinkClick = (link: any) => {
+    setSelectedLink(link);
+    setSelectedNode(null);
+    setIsDrawerOpen(true);
+  };
 
   const handleResetView = () => {
     if (fgRef.current) {
@@ -228,185 +266,182 @@ export default function MemoryGraphView() {
     }
   };
 
-  // Node rendering algorithm
-  const drawNodeCanvas = useCallback(
-    (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const isSelected = selectedNode && selectedNode.id === node.id;
-      const radius = node.val ? node.val : 14;
+  // Custom Node Canvas Renderer
+  const drawNodeCanvas = (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const label = node.label || node.id;
+    const fontSize = 12 / globalScale;
+    ctx.font = `${fontSize}px Sans-Serif`;
 
-      let statusColor = "#10b981"; // default ACTIVE green
-      let glowColor = "rgba(16, 185, 129, 0.4)";
-      let strokeColor = "#ffffff";
+    const isPoisoned = node.status === "FLAGGED_POISON";
+    const isSuperseded = node.status === "SUPERSEDED";
+    const radius = node.val || 14;
 
-      if (node.status === "FLAGGED_POISON" || node.type === "POISONED_FRAGMENT") {
-        statusColor = "#ef4444"; // Danger Red
-        glowColor = "rgba(239, 68, 68, 0.75)";
-        strokeColor = "#fee2e2";
-      } else if (node.status === "SUPERSEDED") {
-        statusColor = "#64748b"; // Slate Gray
-        glowColor = "rgba(100, 116, 139, 0.3)";
-        strokeColor = "#94a3b8";
-      } else if (node.color) {
-        statusColor = node.color;
-      }
+    // Outer Glow Ring
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, radius + 4, 0, 2 * Math.PI, false);
+    if (isPoisoned) {
+      ctx.fillStyle = "rgba(239, 68, 68, 0.25)";
+    } else if (isSuperseded) {
+      ctx.fillStyle = "rgba(100, 116, 139, 0.2)";
+    } else {
+      ctx.fillStyle = "rgba(16, 185, 129, 0.2)";
+    }
+    ctx.fill();
 
-      if (isSelected) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, radius + 7, 0, 2 * Math.PI, false);
-        ctx.fillStyle = glowColor;
-        ctx.fill();
-      }
+    // Node Main Body
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+    if (isPoisoned) {
+      ctx.fillStyle = "#ef4444"; // Red for Poison
+    } else if (isSuperseded) {
+      ctx.fillStyle = "#64748b"; // Gray for Superseded
+    } else {
+      ctx.fillStyle = node.color || "#10b981"; // Green/Blue for Active
+    }
+    ctx.fill();
+    ctx.lineWidth = 2 / globalScale;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
 
-      // Main Node Circle
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-      ctx.fillStyle = statusColor;
-      ctx.fill();
+    // Text Label Shadow Box
+    const textWidth = ctx.measureText(label).width;
+    const bckgDimensions = [textWidth + 8, fontSize + 4];
 
-      // Node Border Stroke
-      ctx.lineWidth = isSelected ? 3 : 1.5;
-      ctx.strokeStyle = isSelected ? "#ffffff" : strokeColor;
-      ctx.stroke();
+    ctx.fillStyle = "rgba(8, 13, 26, 0.85)";
+    ctx.fillRect(
+      node.x - bckgDimensions[0] / 2,
+      node.y + radius + 4,
+      bckgDimensions[0],
+      bckgDimensions[1]
+    );
 
-      // Node Label Rendering below node
-      if (globalScale > 0.65) {
-        const label = node.label || node.id;
-        const fontSize = 12 / globalScale;
-        ctx.font = `bold ${fontSize}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-
-        const textWidth = ctx.measureText(label).width;
-        ctx.fillStyle = "rgba(11, 15, 25, 0.85)";
-        ctx.fillRect(
-          node.x - textWidth / 2 - 4 / globalScale,
-          node.y + radius + 4 / globalScale,
-          textWidth + 8 / globalScale,
-          fontSize + 6 / globalScale
-        );
-
-        ctx.fillStyle = "#a7f3d0";
-        ctx.fillText(label, node.x, node.y + radius + 12 / globalScale);
-      }
-    },
-    [selectedNode]
-  );
-
-  const poisonRelCount = useMemo(() => {
-    return graphData.links.filter((l) => l.status === "FLAGGED_POISON").length;
-  }, [graphData.links]);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = isPoisoned ? "#fca5a5" : "#e2e8f0";
+    ctx.fillText(label, node.x, node.y + radius + 4 + bckgDimensions[1] / 2);
+  };
 
   return (
-    <div className="relative w-full h-[calc(100vh-1px)] bg-[#0b0f19] text-slate-100 font-sans overflow-hidden select-none">
-      {/* Top Navigation & Filter Bar */}
-      <header className="absolute top-0 left-0 right-0 z-20 bg-[#0e1424]/95 backdrop-blur-md border-b border-[#1b273d] px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
-        {/* Left: Memory Graph Title & Search */}
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <div className="flex items-center gap-2 text-[#10b981] font-mono font-black text-lg">
-            <Brain className="text-[#10b981]" size={24} />
-            <span>NEO4J MEMORY GRAPH</span>
+    <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans">
+      {/* Top Floating Control Bar */}
+      <div className="absolute top-4 left-6 right-6 z-20 flex flex-wrap items-center justify-between gap-4 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3 rounded-2xl shadow-xl">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-[#10b981]">
+            <Database size={20} />
           </div>
-
-          <div className="relative flex-1 md:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={15} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search node ID, relationship..."
-              className="w-full bg-[#131b2e] border border-[#202e48] rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-200 font-mono placeholder-slate-500 focus:outline-none focus:border-[#10b981]"
-            />
-          </div>
-        </div>
-
-        {/* Center: Status Filter Buttons */}
-        <div className="flex items-center gap-1.5 bg-[#131b2e] p-1.5 rounded-xl border border-[#202e48]">
-          {[
-            { id: "ALL", label: "All Items", badge: "bg-slate-700 text-slate-200" },
-            { id: "ACTIVE", label: "ACTIVE", badge: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40" },
-            { id: "FLAGGED_POISON", label: "FLAGGED POISON", badge: "bg-red-500/20 text-red-400 border border-red-500/40" },
-            { id: "SUPERSEDED", label: "SUPERSEDED", badge: "bg-slate-600/30 text-slate-400 border border-slate-500/40" },
-          ].map((status) => (
-            <button
-              key={status.id}
-              onClick={() => setSelectedStatusFilter(status.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
-                selectedStatusFilter === status.id
-                  ? `${status.badge} font-bold shadow-md ring-1 ring-white/20`
-                  : "text-slate-400 hover:text-slate-200 hover:bg-[#1a253b]"
-              }`}
-            >
-              {status.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Right Action Controls & Manual Refresh */}
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 bg-[#131b2e] px-3 py-1.5 rounded-lg border border-[#202e48]">
-            <Clock size={13} className="text-[#10b981]" />
-            <span>Updated: {lastUpdated || "Live"}</span>
-          </div>
-
-          <button
-            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs transition-all ${
-              isDrawerOpen
-                ? "bg-[#1f2d47] border-[#10b981] text-[#10b981]"
-                : "bg-[#131b2e] border-[#202e48] text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            {isDrawerOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
-            <span>{isDrawerOpen ? "Hide Details" : "Inspect Details"}</span>
-          </button>
-
-          <button
-            onClick={handleResetView}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#131b2e] border border-[#202e48] text-slate-300 hover:text-white rounded-lg text-xs"
-          >
-            <RotateCw size={14} /> Reset View
-          </button>
-
-          <button
-            onClick={fetchGraphData}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 bg-[#10b981] text-[#0b0f19] font-bold rounded-lg text-xs shadow-md hover:bg-[#34d399] transition-all ${
-              isRefreshing ? "animate-pulse" : ""
-            }`}
-          >
-            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
-            <span>Refresh Neo4j</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Top Left Telemetry & Data Source Banner */}
-      <div className="absolute top-20 left-6 z-10 w-80 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] rounded-2xl p-4 shadow-2xl space-y-3 font-mono">
-        <div className="flex justify-between items-center border-b border-[#1b273d] pb-2">
-          <span className="text-[11px] uppercase text-slate-400 font-bold flex items-center gap-1.5">
-            <Sparkles size={14} className="text-[#10b981]" /> Neo4j Telemetry
-          </span>
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            {dataSource.includes("Live") ? "ONLINE" : "STANDBY"}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-center text-xs">
-          <div className="bg-[#131b2e] border border-[#202e48] p-2.5 rounded-xl">
-            <p className="text-[10px] text-slate-400 uppercase">Entity Nodes</p>
-            <p className="text-base font-bold text-white mt-0.5">{filteredNodes.length}</p>
-          </div>
-          <div className="bg-[#131b2e] border border-[#202e48] p-2.5 rounded-xl">
-            <p className="text-[10px] text-slate-400 uppercase">Parallel Edges</p>
-            <p className="text-base font-bold text-[#10b981] mt-0.5">{filteredLinksWithCurvature.length}</p>
-          </div>
-          <div className="bg-[#131b2e] border border-[#202e48] p-2.5 rounded-xl">
-            <p className="text-[10px] text-slate-400 uppercase">Poisoned Edges</p>
-            <p className="text-base font-bold text-red-400 mt-0.5 flex items-center justify-center gap-1">
-              <ShieldAlert size={14} className="text-red-400" />
-              {poisonRelCount}
+          <div>
+            <h1 className="text-sm font-bold text-white tracking-wide">CortexShield Memory Graph</h1>
+            <p className="text-[11px] text-slate-400">
+              Relationship-Centric Cognitive Integrity Firewall • {graphData.nodes.length} Nodes • {filteredLinksWithCurvature.length} Edges
             </p>
           </div>
-          <div className="bg-[#131b2e] border border-[#202e48] p-2.5 rounded-xl">
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
+          {/* Search Box */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search node or label..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-[#131b2e] border border-[#202e48] text-xs text-slate-200 pl-8 pr-3 py-1.5 rounded-xl focus:outline-none focus:border-[#10b981] w-44 sm:w-56 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Status Filter Buttons */}
+          <div className="flex items-center bg-[#131b2e] p-1 rounded-xl border border-[#202e48]">
+            {["ALL", "ACTIVE", "FLAGGED_POISON", "SUPERSEDED"].map((status) => (
+              <button
+                key={status}
+                onClick={() => setSelectedStatusFilter(status)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                  selectedStatusFilter === status
+                    ? "bg-[#1f2d47] text-white border border-[#10b981]/50 shadow-sm"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {status === "FLAGGED_POISON" ? "POISON" : status}
+              </button>
+            ))}
+          </div>
+
+          {/* Reset Zoom Button */}
+          <button
+            onClick={handleResetView}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#131b2e] border border-[#202e48] text-slate-300 hover:text-white text-xs font-semibold rounded-xl transition-all hover:bg-[#1a253d]"
+            title="Reset 3D Zoom & Center"
+          >
+            <RotateCcw size={13} /> Reset
+          </button>
+
+          {/* Refresh Neo4j Button */}
+          <button
+            onClick={fetchGraphData}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30 text-xs font-bold rounded-xl transition-all shadow-sm"
+          >
+            <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} />
+            {isRefreshing ? "Syncing..." : "Refresh Neo4j"}
+          </button>
+        </div>
+      </div>
+
+      {/* Floating Legend Box with Distinct Node vs Relationship Edge Legend */}
+      <div className="absolute bottom-6 left-6 z-20 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300">
+        <div>
+          <span className="font-bold text-white text-[11px] uppercase tracking-wider block mb-1.5">
+            Node Entity Status
+          </span>
+          <div className="flex items-center gap-4 text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              <span>Active Entity</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+              <span>Flagged Node</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]" />
+              <span>Superseded</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-[#1b273d] pt-2">
+          <span className="font-bold text-white text-[11px] uppercase tracking-wider block mb-1.5">
+            Relationship Edge Status (Lines)
+          </span>
+          <div className="flex items-center gap-4 text-[11px]">
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5 bg-[#10b981] inline-block" />
+              <span>ACTIVE (Verified)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5 bg-[#ef4444] inline-block shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+              <span className="text-red-400 font-bold">FLAGGED_POISON</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5 bg-[#64748b] inline-block" />
+              <span>SUPERSEDED</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-[#1b273d] pt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+          <span>Updated: {lastUpdated || "Just now"}</span>
+          <div className="flex items-center gap-1">
             <p className="text-[10px] text-slate-400 uppercase">Engine Source</p>
             <p className="text-[10px] font-bold text-cyan-400 truncate mt-0.5">{dataSource}</p>
           </div>
@@ -426,9 +461,9 @@ export default function MemoryGraphView() {
               ctx.arc(node.x, node.y, (node.val || 14) + 6, 0, 2 * Math.PI, false);
               ctx.fill();
             }}
-            warmupTicks={150}
-            cooldownTicks={100}
-            cooldownTime={2000}
+            warmupTicks={200}
+            cooldownTicks={0}
+            cooldownTime={0}
             onNodeClick={handleNodeClick}
             onLinkClick={handleLinkClick}
             // 1. Color Edges based on relationship status
@@ -586,44 +621,6 @@ export default function MemoryGraphView() {
           )}
         </aside>
       )}
-
-      {/* 3. Updated Dual Visual Legend (Node Status & Relationship Edge Status) */}
-      <div className="absolute bottom-6 left-6 z-10 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] rounded-2xl p-4 w-80 space-y-3 text-xs font-mono shadow-2xl">
-        {/* Node Section */}
-        <div>
-          <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold block mb-1.5">
-            NODE STATUS LEGEND
-          </span>
-          <div className="flex items-center gap-2 text-slate-200">
-            <span className="w-3 h-3 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-            <span className="font-bold text-emerald-400">ACTIVE NODE</span>
-            <span className="text-[10px] text-slate-400">(user, blue)</span>
-          </div>
-        </div>
-
-        <div className="border-t border-[#1b273d] pt-2">
-          <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold block mb-1.5">
-            RELATIONSHIP EDGE STATUS LEGEND
-          </span>
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-slate-200">
-              <span className="w-4 h-1 rounded bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-              <span className="font-bold text-emerald-400">ACTIVE REL</span>
-              <span className="text-[10px] text-slate-400">(Trust Score: ~0.98)</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-200">
-              <span className="w-4 h-1 rounded bg-[#ef4444] shadow-[0_0_10px_rgba(239,68,68,0.9)] animate-pulse" />
-              <span className="font-bold text-red-400">FLAGGED POISON EDGE</span>
-              <span className="text-[10px] text-slate-400">(Trust Score: ~0.04)</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-200">
-              <span className="w-4 h-1 rounded bg-[#64748b]" />
-              <span className="font-bold text-slate-400">SUPERSEDED REL</span>
-              <span className="text-[10px] text-slate-400">(Trust Score: ~0.35)</span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
