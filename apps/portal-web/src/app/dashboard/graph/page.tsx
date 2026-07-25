@@ -245,19 +245,100 @@ export default function MemoryGraphView() {
   });
 
   const fgRef = useRef<any>(null);
+  const nodesCacheRef = useRef<Map<string, any>>(new Map());
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const reconcileGraphNodes = useCallback((incomingNodes: MemoryNode[]): MemoryNode[] => {
+    return incomingNodes.map((incoming, idx) => {
+      const key = incoming.id || incoming.label;
+      const existing = nodesCacheRef.current.get(key);
+
+      if (existing) {
+        // Update data properties in-place on existing node object instance
+        existing.label = incoming.label;
+        existing.status = incoming.status;
+        existing.type = incoming.type;
+        existing.content = incoming.content;
+        existing.timestamp = incoming.timestamp;
+        existing.tenant = incoming.tenant;
+
+        if (existing.x !== undefined && existing.fx === undefined) {
+          existing.fx = existing.x;
+          existing.fy = existing.y;
+        }
+        return existing;
+      }
+
+      // New node: calculate initial preset position
+      const preset = PRESET_CLUSTER_COORDINATES[key];
+      let initX = 0;
+      let initY = 0;
+      if (preset) {
+        initX = preset.x;
+        initY = preset.y;
+      } else {
+        const angle = (idx / Math.max(incomingNodes.length, 1)) * 2 * Math.PI;
+        const radius = 180;
+        initX = Math.cos(angle) * radius;
+        initY = Math.sin(angle) * radius;
+      }
+
+      const newNode = {
+        ...incoming,
+        x: initX,
+        y: initY,
+        fx: initX,
+        fy: initY,
+      };
+      nodesCacheRef.current.set(key, newNode);
+      return newNode;
+    });
+  }, []);
+
+  const handleNodeDrag = useCallback((node: any) => {
+    if (!node) return;
+    node.fx = node.x;
+    node.fy = node.y;
+    const key = node.id || node.label;
+    if (key) {
+      nodesCacheRef.current.set(key, node);
+    }
+  }, []);
+
+  const handleNodeDragEnd = useCallback((node: any) => {
+    if (!node) return;
+    node.fx = node.x;
+    node.fy = node.y;
+    const key = node.id || node.label;
+    if (key) {
+      nodesCacheRef.current.set(key, node);
+    }
+  }, []);
 
   // Fetch real data from Neo4j API
   const fetchGraphData = useCallback(async () => {
     setIsRefreshing(true);
     setFetchError(null);
+
+    // Lock current rendered node coordinates into cache
+    if (fgRef.current && typeof fgRef.current.graphData === "function") {
+      const currentNodes = fgRef.current.graphData().nodes || [];
+      currentNodes.forEach((n: any) => {
+        if (n && (n.id || n.label) && n.x !== undefined) {
+          n.fx = n.x;
+          n.fy = n.y;
+          nodesCacheRef.current.set(n.id || n.label, n);
+        }
+      });
+    }
+
     try {
       const res = await fetch(`/api/graph?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Unable to load graph — retrying in 5s");
       const json = await res.json();
 
       if (json.success && json.nodes && json.nodes.length > 0) {
-        const positionedNodes = assignPresetCoordinates(json.nodes);
+        const positionedNodes = reconcileGraphNodes(json.nodes);
         setGraphData({
           nodes: positionedNodes,
           links: json.links || [],
@@ -275,7 +356,7 @@ export default function MemoryGraphView() {
       setLastUpdated(new Date().toLocaleTimeString());
       setIsRefreshing(false);
     }
-  }, []);
+  }, [reconcileGraphNodes]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const [wsState, setWsState] = useState<"connected" | "reconnecting" | "disconnected">("disconnected");
@@ -813,6 +894,8 @@ export default function MemoryGraphView() {
             enablePanInteraction={!isDraggingLegend}
             onNodeClick={handleNodeClick}
             onLinkClick={handleLinkClick}
+            onNodeDrag={handleNodeDrag}
+            onNodeDragEnd={handleNodeDragEnd}
             // 1. Color Edges based on relationship status & origin
             linkColor={(link: any) => {
               if (link.status === "FLAGGED_POISON") return "#ef4444"; // Vibrant Red for Poison
