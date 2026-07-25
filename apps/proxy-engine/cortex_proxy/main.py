@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
 import hashlib
+import os
 from fastapi import FastAPI, Request, Header, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import logging
 from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from neo4j import GraphDatabase
 
 # Load env vars before doing anything else
 load_dotenv()
@@ -96,3 +99,68 @@ async def handle_tool_call(
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "proxy-engine"}
+
+
+# ── Remediation Endpoint ──────────────────────────────────────────────────────
+
+class HealRequest(BaseModel):
+    edge_element_id: str
+
+@app.post("/api/graph/heal")
+async def heal_edge(
+    body: HealRequest,
+    _auth: bool = Depends(verify_api_key)
+):
+    """
+    Administrative override: marks a specific Neo4j relationship as SUPERSEDED
+    by its elementId. Intended for the 'Remediate Poisoned Edge' demo button.
+
+    This is a direct administrative action — it does NOT run the trust-scoring
+    or poison-check pipeline. Auth check (valid API key) still required.
+
+    ADR note: Routed in proxy-engine (main.py) alongside /rpc because:
+      1. proxy-engine already owns the API key auth dependency.
+      2. Avoids adding a new FastAPI service for a single admin endpoint.
+      3. Neo4j driver is already initialised in this process via cortex_neo4j_client.
+
+    Body:  {"edge_element_id": "<neo4j elementId string>"}
+    200:   {"success": true, "new_status": "SUPERSEDED"}
+    404:   {"detail": "No relationship found with elementId <id>"}
+    """
+    edge_id = body.edge_element_id.strip()
+    logger.info(f"heal_edge called for elementId={edge_id!r}")
+
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    # Aura uses neo4j+s:// — rewrite to ssc to skip Windows cert chain validation
+    if neo4j_uri.startswith("neo4j+s://"):
+        neo4j_uri = neo4j_uri.replace("neo4j+s://", "neo4j+ssc://", 1)
+
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "localdevpassword")
+
+    try:
+        driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH ()-[r]->()
+                WHERE elementId(r) = $edge_element_id
+                SET r.status = 'SUPERSEDED', r.superseded_at = datetime()
+                RETURN r.status AS new_status
+                """,
+                edge_element_id=edge_id
+            )
+            record = result.single()
+        driver.close()
+    except Exception as e:
+        logger.error(f"Neo4j error in heal_edge: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Neo4j error: {str(e)}")
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No relationship found with elementId '{edge_id}'"
+        )
+
+    logger.info(f"heal_edge: elementId={edge_id!r} -> new_status={record['new_status']}")
+    return {"success": True, "new_status": record["new_status"]}
