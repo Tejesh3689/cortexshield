@@ -22,7 +22,7 @@ export async function GET() {
     // Fetch all relationships with relationship properties
     const relResult = await session.run(
       `MATCH (a)-[r]->(b) 
-       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(r) as rProps, properties(a) as aProps, properties(b) as bProps`
+       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(a) as aProps, properties(b) as bProps, properties(r) as rProps`
     );
 
     await session.close();
@@ -54,15 +54,9 @@ export async function GET() {
         status,
         type: props.type || labels[0] || "Entity",
         val: 14,
-        memoryHash: props.memoryHash || props.hash || `0x${Math.random().toString(16).slice(2, 10).toUpperCase()}`,
-        vectorDimension: props.vectorDimension || "1536 (text-embedding-3-large)",
-        similarityScore: props.similarityScore ?? 0.94,
-        decayFactor: props.decayFactor ?? 0.95,
-        retentionPolicy: props.retentionPolicy || "Active Context",
-        accessCount: props.accessCount ?? 420,
         tenant: props.tenant_id || props.tenant || "tenant_pro_1",
         timestamp: props.timestamp || new Date().toISOString().replace("T", " ").slice(0, 19),
-        content: props.content || props.text || `Neo4j Node Payload: ${label} (Tenant: ${props.tenant_id || "tenant_pro_1"})`,
+        content: props.content || props.text || `Neo4j Entity Node: ${label} (Tenant: ${props.tenant_id || "tenant_pro_1"})`,
         source: "neo4j",
       };
     });
@@ -91,7 +85,7 @@ export async function GET() {
       const trustScore =
         rProps.trust_score ??
         rProps.trustScore ??
-        (status === "FLAGGED_POISON" ? 0.05 : status === "SUPERSEDED" ? 0.35 : 0.98);
+        (status === "FLAGGED_POISON" ? 0.04 : status === "SUPERSEDED" ? 0.35 : 0.98);
 
       return {
         id: `link_${idx}`,
@@ -109,7 +103,6 @@ export async function GET() {
     );
 
     if (userBlueLinks.length > 0) {
-      // Annotate distinct statuses across the parallel user->blue relationships
       let count = 0;
       rawLinks = rawLinks.map((l) => {
         if ((l.source === "user" || l.source === "user_alice") && (l.target === "blue" || l.target === "system_prompt")) {
@@ -125,7 +118,6 @@ export async function GET() {
         return l;
       });
 
-      // If fewer than 3 parallel links exist between user and blue, inject the missing relationships to make 3 parallel lines
       if (count < 3) {
         const primarySource = userBlueLinks[0].source;
         const primaryTarget = userBlueLinks[0].target;
