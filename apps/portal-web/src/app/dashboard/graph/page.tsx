@@ -18,11 +18,14 @@ import {
 // Dynamically import react-force-graph-2d to prevent SSR canvas issues
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
+import { SkeletonLoader, ErrorBanner, EmptyStatePrompt, OfflineBanner } from "@/components/StatusBanners";
+
 export interface MemoryNode {
   id: string;
   label: string;
-  status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED";
-  type: "SHORT_TERM" | "LONG_TERM" | "VECTOR_EMBEDDING" | "POISONED_FRAGMENT" | string;
+  status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" | "EXTERNAL_FETCH";
+  origin?: "EXTERNAL_FETCH" | string;
+  type: "SHORT_TERM" | "LONG_TERM" | "VECTOR_EMBEDDING" | "POISONED_FRAGMENT" | "EXTERNAL_FETCH" | string;
   color?: string;
   val: number;
   retentionPolicy?: string;
@@ -41,7 +44,8 @@ export interface MemoryLink {
   source: string | MemoryNode;
   target: string | MemoryNode;
   label: string;
-  status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED";
+  status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" | "EXTERNAL_FETCH";
+  origin?: "EXTERNAL_FETCH" | string;
   trustScore: number;
   curvature?: number;
 }
@@ -63,7 +67,8 @@ const PRESET_CLUSTER_COORDINATES: Record<string, { x: number; y: number }> = {
 
   // Cluster 4: system_prompt & ignore_previous_instructions (Top Right)
   system_prompt: { x: 160, y: -160 },
-  ignore_previous_instructions: { x: 240, y: -120 },
+  // Cluster 5: external_fetch_doc (Top Left)
+  external_fetch_doc: { x: -160, y: -160 },
 };
 
 function assignPresetCoordinates(nodes: MemoryNode[]): MemoryNode[] {
@@ -184,6 +189,18 @@ const SEED_MEMORY_NODES: MemoryNode[] = assignPresetCoordinates([
     timestamp: "2026-07-25 07:00:00",
     content: "Poisoned prompt injection fragment detected.",
   },
+  {
+    id: "external_fetch_doc",
+    label: "external_web_scrape",
+    status: "EXTERNAL_FETCH",
+    origin: "EXTERNAL_FETCH",
+    type: "EXTERNAL_FETCH",
+    color: "#a855f7",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:05:00",
+    content: "External Web Fetch: Content pulled autonomously from outside sources (Initial Trust Score: 0.1).",
+  },
 ]);
 
 const SEED_MEMORY_LINKS: MemoryLink[] = [
@@ -194,6 +211,7 @@ const SEED_MEMORY_LINKS: MemoryLink[] = [
   { id: "link_bob_sales", source: "user_bob", target: "sales_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.94 },
   { id: "link_bob_eng", source: "user_bob", target: "engineering_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.92 },
   { id: "link_sys_inj", source: "system_prompt", target: "ignore_previous_instructions", label: "INJECTION_ATTEMPT", status: "FLAGGED_POISON", trustScore: 0.02 },
+  { id: "link_ext_fetch_1", source: "user_bob", target: "external_fetch_doc", label: "EXTERNAL_FETCH", status: "EXTERNAL_FETCH", origin: "EXTERNAL_FETCH", trustScore: 0.1 },
 ];
 
 export default function MemoryGraphView() {
@@ -227,12 +245,15 @@ export default function MemoryGraphView() {
   });
 
   const fgRef = useRef<any>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Fetch real data from Neo4j API
   const fetchGraphData = useCallback(async () => {
     setIsRefreshing(true);
+    setFetchError(null);
     try {
       const res = await fetch(`/api/graph?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Unable to load graph — retrying in 5s");
       const json = await res.json();
 
       if (json.success && json.nodes && json.nodes.length > 0) {
@@ -246,8 +267,9 @@ export default function MemoryGraphView() {
         console.warn("Neo4j API empty or errored, using seed nodes");
         setDataSource("Seed Fallback (Neo4j Standby)");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch graph data from API:", err);
+      setFetchError("Unable to load graph — retrying in 5s");
       setDataSource("Seed Fallback (Neo4j Offline)");
     } finally {
       setLastUpdated(new Date().toLocaleTimeString());
@@ -255,11 +277,64 @@ export default function MemoryGraphView() {
     }
   }, []);
 
+  const wsRef = useRef<WebSocket | null>(null);
+  const [wsState, setWsState] = useState<"connected" | "reconnecting" | "disconnected">("disconnected");
+  const [showLivePulse, setShowLivePulse] = useState(false);
+
   useEffect(() => {
     setIsMounted(true);
     fetchGraphData();
 
-    // Auto-poll every 10 seconds so new edges from MCP/add_memory appear without manual refresh
+    let isMountedFlag = true;
+
+    const connectWs = () => {
+      if (!isMountedFlag) return;
+      const baseWsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8200/ws/graph";
+      const wsUrl = `${baseWsUrl}?tenant=tenant_pro_1`;
+
+      try {
+        setWsState("reconnecting");
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (isMountedFlag) setWsState("connected");
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "graph_update" || data.event) {
+              fetchGraphData();
+              setShowLivePulse(true);
+              setTimeout(() => setShowLivePulse(false), 2000);
+            }
+          } catch (err) {
+            // ignore non-json
+          }
+        };
+
+        ws.onclose = () => {
+          if (isMountedFlag) {
+            setWsState("reconnecting");
+            setTimeout(connectWs, 3000);
+          }
+        };
+
+        ws.onerror = () => {
+          if (isMountedFlag) setWsState("reconnecting");
+        };
+      } catch (e) {
+        if (isMountedFlag) {
+          setWsState("reconnecting");
+          setTimeout(connectWs, 3000);
+        }
+      }
+    };
+
+    connectWs();
+
+    // Auto-poll fallback every 10 seconds so new edges from MCP/add_memory appear without manual refresh
     const pollInterval = setInterval(fetchGraphData, 10_000);
 
     const timer = setTimeout(() => {
@@ -269,8 +344,12 @@ export default function MemoryGraphView() {
     }, 400);
 
     return () => {
+      isMountedFlag = false;
       clearTimeout(timer);
       clearInterval(pollInterval);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+      }
     };
   }, [fetchGraphData]);
 
@@ -465,6 +544,7 @@ export default function MemoryGraphView() {
 
     const isPoisoned = node.status === "FLAGGED_POISON";
     const isSuperseded = node.status === "SUPERSEDED";
+    const isExternalFetch = node.status === "EXTERNAL_FETCH" || node.origin === "EXTERNAL_FETCH" || node.type === "EXTERNAL_FETCH";
     const radius = node.val || 14;
 
     // Outer Glow Ring
@@ -474,6 +554,8 @@ export default function MemoryGraphView() {
       ctx.fillStyle = "rgba(239, 68, 68, 0.25)";
     } else if (isSuperseded) {
       ctx.fillStyle = "rgba(100, 116, 139, 0.2)";
+    } else if (isExternalFetch) {
+      ctx.fillStyle = "rgba(168, 85, 247, 0.25)"; // Purple glow for External Fetch
     } else {
       ctx.fillStyle = "rgba(16, 185, 129, 0.2)";
     }
@@ -486,6 +568,8 @@ export default function MemoryGraphView() {
       ctx.fillStyle = "#ef4444"; // Red for Poison
     } else if (isSuperseded) {
       ctx.fillStyle = "#64748b"; // Gray for Superseded
+    } else if (isExternalFetch) {
+      ctx.fillStyle = "#a855f7"; // Purple sphere for External Fetch (Low Trust)
     } else {
       ctx.fillStyle = node.color || "#10b981"; // Green/Blue for Active
     }
@@ -508,12 +592,26 @@ export default function MemoryGraphView() {
 
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = isPoisoned ? "#fca5a5" : "#e2e8f0";
+    ctx.fillStyle = isPoisoned ? "#fca5a5" : isExternalFetch ? "#e9d5ff" : "#e2e8f0";
     ctx.fillText(label, node.x, node.y + radius + 4 + bckgDimensions[1] / 2);
   };
 
   return (
     <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans">
+      {/* Offline Banner Overlay */}
+      {wsState === "disconnected" && (
+        <div className="absolute top-2 left-6 right-6 z-30">
+          <OfflineBanner isOffline={true} />
+        </div>
+      )}
+
+      {/* Error Banner Overlay */}
+      {fetchError && (
+        <div className="absolute top-16 left-6 right-6 z-30">
+          <ErrorBanner message={fetchError} onRetry={fetchGraphData} />
+        </div>
+      )}
+
       {/* Top Floating Control Bar */}
       <div className="absolute top-4 left-6 right-6 z-20 flex flex-wrap items-center justify-between gap-4 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3 rounded-2xl shadow-xl">
         <div className="flex items-center gap-3">
@@ -552,16 +650,16 @@ export default function MemoryGraphView() {
 
           {/* Status Filter Buttons */}
           <div className="flex items-center bg-[#131b2e] p-1 rounded-xl border border-[#202e48]">
-            {["ALL", "ACTIVE", "FLAGGED_POISON", "SUPERSEDED"].map((status) => (
+            {["ALL", "ACTIVE", "FLAGGED_POISON", "EXTERNAL_FETCH", "SUPERSEDED"].map((status) => (
               <button
                 key={status}
                 onClick={() => setSelectedStatusFilter(status)}
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${selectedStatusFilter === status
-                    ? "bg-[#1f2d47] text-white border border-[#10b981]/50 shadow-sm"
-                    : "text-slate-400 hover:text-slate-200"
+                  ? "bg-[#1f2d47] text-white border border-[#10b981]/50 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
                   }`}
               >
-                {status === "FLAGGED_POISON" ? "POISON" : status}
+                {status === "FLAGGED_POISON" ? "POISON" : status === "EXTERNAL_FETCH" ? "EXT FETCH" : status}
               </button>
             ))}
           </div>
@@ -574,6 +672,29 @@ export default function MemoryGraphView() {
           >
             <RotateCcw size={13} /> Reset
           </button>
+
+          {/* Real-Time WebSocket Live Indicator Badge */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#131b2e] border border-[#202e48] rounded-xl text-xs font-bold select-none">
+            {wsState === "connected" ? (
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <span className="relative flex h-2.5 w-2.5">
+                  {showLivePulse && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  )}
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
+                <span>● Live</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-amber-400">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                </span>
+                <span>● Reconnecting...</span>
+              </div>
+            )}
+          </div>
 
           {/* Refresh Neo4j Button */}
           <button
@@ -619,7 +740,7 @@ export default function MemoryGraphView() {
           </span>
           <span title="Drag to move legend"><GripHorizontal size={14} className="text-slate-500 hover:text-slate-300" /></span>
         </div>
-        <div className="flex items-center gap-4 text-[11px]">
+        <div className="flex flex-wrap items-center gap-3.5 text-[11px]">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
             <span>Active Entity</span>
@@ -627,6 +748,10 @@ export default function MemoryGraphView() {
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
             <span>Flagged Node</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#a855f7] shadow-[0_0_8px_rgba(168,85,247,0.5)]" />
+            <span className="text-purple-300 font-bold">External Fetch (Low Trust)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]" />
@@ -638,7 +763,7 @@ export default function MemoryGraphView() {
           <span className="font-bold text-white text-[11px] uppercase tracking-wider block mb-1.5">
             Relationship Edge Status (Lines)
           </span>
-          <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex flex-wrap items-center gap-3.5 text-[11px]">
             <div className="flex items-center gap-1.5">
               <span className="w-4 h-0.5 bg-[#10b981] inline-block" />
               <span>ACTIVE (Verified)</span>
@@ -646,6 +771,10 @@ export default function MemoryGraphView() {
             <div className="flex items-center gap-1.5">
               <span className="w-4 h-0.5 bg-[#ef4444] inline-block shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
               <span className="text-red-400 font-bold">FLAGGED_POISON</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-4 h-0.5 bg-[#a855f7] inline-block shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+              <span className="text-purple-400 font-bold">EXTERNAL_FETCH</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-4 h-0.5 bg-[#64748b] inline-block" />
@@ -684,18 +813,19 @@ export default function MemoryGraphView() {
             enablePanInteraction={!isDraggingLegend}
             onNodeClick={handleNodeClick}
             onLinkClick={handleLinkClick}
-            // 1. Color Edges based on relationship status
+            // 1. Color Edges based on relationship status & origin
             linkColor={(link: any) => {
               if (link.status === "FLAGGED_POISON") return "#ef4444"; // Vibrant Red for Poison
               if (link.status === "SUPERSEDED") return "#64748b"; // Muted Slate Gray
+              if (link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" || link.label?.includes("EXTERNAL")) return "#a855f7"; // Vibrant Purple for External Fetch
               return "#10b981"; // Emerald Green / Teal for Active
             }}
             // 2. Render Parallel Edges as visually distinct curves using curvature offset
             linkCurvature={(link: any) => link.curvature || 0}
-            linkWidth={(link: any) => (link.status === "FLAGGED_POISON" ? 3.8 : link.status === "SUPERSEDED" ? 1.8 : 2.5)}
-            linkDirectionalParticles={(link: any) => (link.status === "FLAGGED_POISON" ? 4 : link.status === "ACTIVE" ? 2 : 0)}
-            linkDirectionalParticleSpeed={(link: any) => (link.status === "FLAGGED_POISON" ? 0.008 : 0.004)}
-            linkDirectionalParticleColor={(link: any) => (link.status === "FLAGGED_POISON" ? "#ef4444" : "#10b981")}
+            linkWidth={(link: any) => (link.status === "FLAGGED_POISON" ? 3.8 : link.status === "SUPERSEDED" ? 1.8 : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? 3.0 : 2.5)}
+            linkDirectionalParticles={(link: any) => (link.status === "FLAGGED_POISON" ? 4 : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? 3 : link.status === "ACTIVE" ? 2 : 0)}
+            linkDirectionalParticleSpeed={(link: any) => (link.status === "FLAGGED_POISON" ? 0.008 : link.status === "EXTERNAL_FETCH" ? 0.006 : 0.004)}
+            linkDirectionalParticleColor={(link: any) => (link.status === "FLAGGED_POISON" ? "#ef4444" : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? "#a855f7" : "#10b981")}
             linkHoverPrecision={8}
             // 4. Hover Tooltip showing relationship trust_score and status directly
             linkLabel={(link: any) => `
@@ -739,10 +869,10 @@ export default function MemoryGraphView() {
                   <span className="font-bold text-white text-sm truncate">{selectedLink.label || "RELATIONSHIP"}</span>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${selectedLink.status === "FLAGGED_POISON"
-                        ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
-                        : selectedLink.status === "SUPERSEDED"
-                          ? "bg-slate-600/30 text-slate-400 border border-slate-500/40"
-                          : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
+                      : selectedLink.status === "SUPERSEDED"
+                        ? "bg-slate-600/30 text-slate-400 border border-slate-500/40"
+                        : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
                       }`}
                   >
                     {selectedLink.status || "ACTIVE"}
@@ -756,10 +886,10 @@ export default function MemoryGraphView() {
                   <span className="text-slate-400">Relationship Status</span>
                   <span
                     className={`font-bold ${selectedLink.status === "FLAGGED_POISON"
-                        ? "text-red-400"
-                        : selectedLink.status === "SUPERSEDED"
-                          ? "text-slate-400"
-                          : "text-emerald-400"
+                      ? "text-red-400"
+                      : selectedLink.status === "SUPERSEDED"
+                        ? "text-slate-400"
+                        : "text-emerald-400"
                       }`}
                   >
                     {selectedLink.status || "ACTIVE"}

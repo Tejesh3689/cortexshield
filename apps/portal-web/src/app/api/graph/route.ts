@@ -39,7 +39,7 @@ export async function GET() {
       const label = props.label || props.name || props.id || labels[0] || `Node ${internalId}`;
 
       // Real entities like "user" and "blue" are ACTIVE as nodes
-      let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" = "ACTIVE";
+      let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" | "EXTERNAL_FETCH" = "ACTIVE";
       if (
         props.status === "FLAGGED_POISON" ||
         labels.includes("Poisoned") ||
@@ -48,6 +48,12 @@ export async function GET() {
         status = "FLAGGED_POISON";
       } else if (props.status === "SUPERSEDED" || labels.includes("Superseded")) {
         status = "SUPERSEDED";
+      } else if (
+        props.status === "EXTERNAL_FETCH" ||
+        props.origin === "EXTERNAL_FETCH" ||
+        labels.includes("ExternalFetch")
+      ) {
+        status = "EXTERNAL_FETCH";
       }
 
       return {
@@ -73,23 +79,30 @@ export async function GET() {
       const relType = String(rec.get("relType") || "ASSOCIATED_WITH");
       const rawElementId = rec.get("elementId") ? String(rec.get("elementId")) : `link_${idx}`;
 
-      let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" = "ACTIVE";
+      let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" | "EXTERNAL_FETCH" = "ACTIVE";
       if (
         rProps.status === "FLAGGED_POISON" ||
         rProps.status === "POISONED" ||
         rProps.poisoned === true ||
-        rProps.trust_score < 0.3 ||
+        (rProps.trust_score !== undefined && rProps.trust_score < 0.3 && rProps.trust_score > 0.1) ||
         relType.includes("POISON")
       ) {
         status = "FLAGGED_POISON";
       } else if (rProps.status === "SUPERSEDED") {
         status = "SUPERSEDED";
+      } else if (
+        rProps.status === "EXTERNAL_FETCH" ||
+        rProps.origin === "EXTERNAL_FETCH" ||
+        relType.includes("EXTERNAL") ||
+        rProps.trust_score === 0.1
+      ) {
+        status = "EXTERNAL_FETCH";
       }
 
       const trustScore =
         rProps.trust_score ??
         rProps.trustScore ??
-        (status === "FLAGGED_POISON" ? 0.04 : status === "SUPERSEDED" ? 0.35 : 0.98);
+        (status === "FLAGGED_POISON" ? 0.04 : status === "SUPERSEDED" ? 0.35 : status === "EXTERNAL_FETCH" ? 0.1 : 0.98);
 
       return {
         id: `link_${idx}`,

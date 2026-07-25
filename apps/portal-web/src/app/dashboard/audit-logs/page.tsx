@@ -93,6 +93,8 @@ const SEED_AUDIT_LOGS: AuditLogRow[] = [
   },
 ];
 
+import { SkeletonLoader, ErrorBanner, EmptyStatePrompt } from "@/components/StatusBanners";
+
 export default function AuditLogsPage() {
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -100,13 +102,16 @@ export default function AuditLogsPage() {
   const [selectedLog, setSelectedLog] = useState<AuditLogRow | null>(SEED_AUDIT_LOGS[0]);
   const [hoveredHash, setHoveredHash] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [dataSource, setDataSource] = useState<string>("Neon Postgres (Live Ledger)");
 
   const fetchAuditLogs = useCallback(async () => {
     setIsRefreshing(true);
+    setFetchError(null);
     try {
       const res = await fetch("/api/audit-logs");
+      if (!res.ok) throw new Error("Unable to load audit logs — retrying in 5s");
       const json = await res.json();
       if (json.success && json.logs && json.logs.length > 0) {
         setAuditLogs(json.logs);
@@ -115,8 +120,9 @@ export default function AuditLogsPage() {
           setSelectedLog(json.logs[0]);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load audit logs from API", err);
+      setFetchError("Unable to load audit logs — retrying in 5s");
     } finally {
       setLastUpdated(new Date().toLocaleTimeString());
       setIsRefreshing(false);
@@ -126,6 +132,31 @@ export default function AuditLogsPage() {
   useEffect(() => {
     fetchAuditLogs();
   }, [fetchAuditLogs]);
+
+  const chainMap = useMemo(() => {
+    // Sort rows ASC by timestamp to perform sequential cryptographic chain validation
+    const sortedAsc = [...auditLogs].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const resultMap: Record<string, { valid: boolean; isFirst: boolean }> = {};
+    for (let i = 0; i < sortedAsc.length; i++) {
+      const row = sortedAsc[i];
+      if (i === 0) {
+        resultMap[row.id] = { valid: true, isFirst: true };
+      } else {
+        const prevRow = sortedAsc[i - 1];
+        const valid = Boolean(row.prevHash && prevRow.hash && row.prevHash === prevRow.hash);
+        resultMap[row.id] = { valid, isFirst: false };
+      }
+    }
+    return resultMap;
+  }, [auditLogs]);
+
+  const brokenChainId = useMemo(() => {
+    const brokenEntry = Object.entries(chainMap).find(([id, res]) => !res.valid && !res.isFirst);
+    return brokenEntry ? brokenEntry[0] : null;
+  }, [chainMap]);
 
   const filteredLogs = useMemo(() => {
     return auditLogs.filter((log) => {
@@ -182,6 +213,16 @@ export default function AuditLogsPage() {
             <span>Updated: {lastUpdated || "Live"}</span>
           </div>
 
+          {/* Verify Integrity Manual Button */}
+          <button
+            onClick={fetchAuditLogs}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30 font-bold rounded-xl shadow-lg transition-all"
+          >
+            <ShieldCheck size={15} className={isRefreshing ? "animate-spin text-emerald-300" : ""} />
+            <span>Verify Integrity</span>
+          </button>
+
           <button
             onClick={fetchAuditLogs}
             className={`flex items-center gap-1.5 px-3.5 py-2 bg-[#0e1424] border border-[#1b273d] text-slate-300 hover:text-white rounded-xl transition-all ${
@@ -196,6 +237,44 @@ export default function AuditLogsPage() {
             <Download size={14} /> Export Provenance CSV
           </button>
         </div>
+      </div>
+
+      {/* Error State Banner */}
+      {fetchError && (
+        <ErrorBanner message={fetchError} onRetry={fetchAuditLogs} />
+      )}
+
+      {/* Empty State Onboarding Banner */}
+      {auditLogs.length === 0 && !fetchError && (
+        <EmptyStatePrompt
+          title="No audit provenance records found yet"
+          description="Connect your AI agent to begin generating cryptographically linked audit ledger records."
+        />
+      )}
+
+      {/* Verification Banner Top of Page */}
+      <div className="font-mono">
+        {!brokenChainId ? (
+          <div className="p-3.5 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+              <span>✓ Audit chain verified — {auditLogs.length} records, integrity intact</span>
+            </div>
+            <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded text-emerald-400">
+              HASH PROVENANCE OK
+            </span>
+          </div>
+        ) : (
+          <div className="p-3.5 bg-red-950/70 border border-red-500/50 rounded-xl text-red-300 text-xs font-bold flex items-center justify-between shadow-lg animate-pulse">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-red-400 shrink-0" />
+              <span>⚠ Chain integrity violation at record {brokenChainId}</span>
+            </div>
+            <span className="text-[10px] bg-red-500/20 border border-red-500/30 px-2 py-0.5 rounded text-red-400">
+              HASH MISMATCH DETECTED
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Cryptographic Ledger Telemetry Bar */}
@@ -314,22 +393,30 @@ export default function AuditLogsPage() {
                           </div>
                         </td>
 
-                        {/* Visual Chain Connector Icon (Priority 3) */}
-                        <td className="p-3.5 text-center">
-                          {isChainLinked ? (
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm"
-                              title={`Matches next log's current hash: ${nextLog.hash.slice(0, 10)}...`}
-                            >
-                              <LinkIcon size={12} className="text-[#10b981]" /> LINKED
-                            </span>
-                          ) : log.prevHash.startsWith("GENESIS") ? (
-                            <span className="text-[10px] text-slate-500 font-mono">GENESIS</span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-cyan-400">
-                              <CheckCircle2 size={12} /> OK
-                            </span>
-                          )}
+                        {/* Visual Chain Connector Icon (TASK 5) */}
+                        <td className="p-3.5 text-center font-mono">
+                          {(() => {
+                            const res = chainMap[log.id] || { valid: true, isFirst: false };
+                            if (res.isFirst || log.prevHash.startsWith("GENESIS")) {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#131b2e] text-slate-400 border border-[#202e48]">
+                                  ⚓ Chain origin
+                                </span>
+                              );
+                            } else if (res.valid) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-emerald-400 font-bold text-xs" title="Valid chain link">
+                                  🔗 <span className="text-[10px] hidden sm:inline">Linked</span>
+                                </span>
+                              );
+                            } else {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-red-400 font-bold text-xs animate-pulse" title="Broken chain link (prev_hash mismatch)">
+                                  ⛓️ <span className="text-[10px]">Tampered</span>
+                                </span>
+                              );
+                            }
+                          })()}
                         </td>
                       </tr>
                     );

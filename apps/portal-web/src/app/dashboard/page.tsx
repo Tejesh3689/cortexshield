@@ -19,6 +19,16 @@ import {
   Database
 } from "lucide-react";
 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
 interface OverviewMetrics {
   shieldedRequests: string;
   shieldedRequestsGrowth: string;
@@ -37,6 +47,13 @@ interface ChartBar {
   threat: boolean;
 }
 
+interface SeriesItem {
+  period_start: string;
+  operation_count: number;
+  firewall_deny_count: number;
+  poison_detection_count: number;
+}
+
 interface LogEvent {
   status: string;
   type: string;
@@ -53,13 +70,18 @@ interface ThreatVector {
   textColor: string;
 }
 
+import { SkeletonLoader, ErrorBanner, EmptyStatePrompt } from "@/components/StatusBanners";
+
 export default function DashboardOverview() {
   const [mounted, setMounted] = useState(false);
   const [timeframe, setTimeframe] = useState("24h");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [dbConnected, setDbConnected] = useState(false);
   const [dbSource, setDbSource] = useState("Loading Telemetry...");
+  const [seriesData, setSeriesData] = useState<SeriesItem[]>([]);
+  const [isSeriesEmpty, setIsSeriesEmpty] = useState(false);
 
   const [metrics, setMetrics] = useState<OverviewMetrics>({
     shieldedRequests: "0",
@@ -132,21 +154,46 @@ export default function DashboardOverview() {
 
   const fetchOverviewData = useCallback(async (selectedTimeframe: string) => {
     setIsRefreshing(true);
+    setFetchError(null);
     try {
-      const res = await fetch(`/api/overview?timeframe=${selectedTimeframe}`);
-      if (!res.ok) throw new Error("Failed to fetch overview data");
-      const data = await res.json();
+      const [resOverview, resMetrics] = await Promise.all([
+        fetch(`/api/overview?timeframe=${selectedTimeframe}`),
+        fetch(`/api/dashboard/metrics?tenant_id=tenant_pro_1`),
+      ]);
 
-      if (data.success) {
-        if (data.metrics) setMetrics(data.metrics);
-        if (data.chartData) setChartData(data.chartData);
-        if (data.liveLogs) setLiveLogs(data.liveLogs);
-        if (data.threatVectors) setThreatVectors(data.threatVectors);
-        setDbConnected(data.isDbConnected ?? true);
-        setDbSource(data.dbSource || "Neon Postgres & Neo4j Aura");
+      if (!resOverview.ok && !resMetrics.ok) {
+        throw new Error("Unable to load metrics telemetry — retrying in 5s");
       }
-    } catch (err) {
+
+      if (resOverview.ok) {
+        const data = await resOverview.json();
+        if (data.success) {
+          if (data.metrics) setMetrics(data.metrics);
+          if (data.chartData) setChartData(data.chartData);
+          if (data.liveLogs) setLiveLogs(data.liveLogs);
+          if (data.threatVectors) setThreatVectors(data.threatVectors);
+          setDbConnected(data.isDbConnected ?? true);
+          setDbSource(data.dbSource || "Neon Postgres & Neo4j Aura");
+        }
+      }
+
+      if (resMetrics.ok) {
+        const metricsData = await resMetrics.json();
+        if (metricsData.success) {
+          setSeriesData(metricsData.series || []);
+          setIsSeriesEmpty(metricsData.isEmpty ?? false);
+          if (metricsData.totals) {
+            setMetrics((prev) => ({
+              ...prev,
+              shieldedRequests: metricsData.totals.total_operations.toLocaleString(),
+              blockedThreats: metricsData.totals.total_denials.toLocaleString(),
+            }));
+          }
+        }
+      }
+    } catch (err: any) {
       console.error("Overview data load error:", err);
+      setFetchError("Unable to load overview metrics — retrying in 5s");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -241,6 +288,19 @@ export default function DashboardOverview() {
           </button>
         </div>
       </div>
+
+      {/* Error Banner */}
+      {fetchError && (
+        <ErrorBanner message={fetchError} onRetry={() => fetchOverviewData(timeframe)} />
+      )}
+
+      {/* Empty State Banner when no telemetry recorded yet */}
+      {isSeriesEmpty && !fetchError && (
+        <EmptyStatePrompt
+          title="No live telemetry operations recorded yet"
+          description="Connect your AI agent to begin routing requests and tool calls through CortexShield."
+        />
+      )}
 
       {/* KPI Stat Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 font-mono">
@@ -339,31 +399,42 @@ export default function DashboardOverview() {
               </span>
             </div>
 
-            {/* Visual Bar Graph Stream */}
-            <div className="h-44 flex items-end justify-between gap-2 pt-6 pb-2 border-b border-[#172238]">
-              {chartData.map((bar, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
-                  <div
-                    className={`w-full rounded-t-md transition-all group-hover:brightness-125 ${
-                      bar.threat
-                        ? "bg-gradient-to-t from-red-600 to-red-400 shadow-sm shadow-red-500/50"
-                        : "bg-gradient-to-t from-[#1b273d] to-[#5cd3c1]"
-                    }`}
-                    style={{ height: `${bar.val}%` }}
-                  />
-                  <span className="text-[10px] text-slate-500">{bar.time}</span>
+            {/* Recharts LineChart showing operations/hour over 7 days */}
+            <div className="h-56 w-full pt-4 pb-2 border-b border-[#172238]">
+              {seriesData && seriesData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={seriesData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <XAxis dataKey="period_start" stroke="#64748b" tick={{ fontSize: 10 }} />
+                    <YAxis stroke="#64748b" tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0e1424", borderColor: "#1b273d", borderRadius: "0.75rem", fontSize: "12px" }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+                    <Line type="monotone" dataKey="operation_count" stroke="#22c55e" name="Operations" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="firewall_deny_count" stroke="#ef4444" name="Denials" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="poison_detection_count" stroke="#f97316" name="Threats" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs gap-1 font-mono bg-[#0b0f19]/50 rounded-xl border border-[#1b273d]/50">
+                  <Database size={20} className="text-slate-600 mb-1" />
+                  <span className="font-bold text-slate-400">No activity in this period</span>
+                  <span className="text-[11px] text-slate-500">Usage counters will record hourly operations & firewall denials live.</span>
                 </div>
-              ))}
+              )}
             </div>
 
             {/* Legend & Summary Footer */}
             <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 pt-1">
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-[#5cd3c1]" /> Normal Request Passes
+                  <span className="w-3 h-0.5 bg-[#22c55e] inline-block" /> Total Operations
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded bg-red-500" /> Blocked Threat Spikes
+                  <span className="w-3 h-0.5 bg-[#ef4444] inline-block" /> Firewall Denials
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 bg-[#f97316] inline-block" /> Threat Detections
                 </span>
               </div>
               <span className="text-slate-300 font-bold">Peak Overhead: {metrics.latencyMs}</span>
