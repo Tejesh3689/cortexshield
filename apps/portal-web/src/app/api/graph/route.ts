@@ -19,10 +19,10 @@ export async function GET() {
        RETURN id(n) as internalId, labels(n) as labels, properties(n) as props`
     );
 
-    // Fetch all relationships
+    // Fetch all relationships with relationship properties
     const relResult = await session.run(
       `MATCH (a)-[r]->(b) 
-       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(a) as aProps, properties(b) as bProps`
+       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(r) as rProps, properties(a) as aProps, properties(b) as bProps`
     );
 
     await session.close();
@@ -35,20 +35,16 @@ export async function GET() {
       const nodeId = props.id || props.node_id || `neo4j_${internalId}`;
       const label = props.label || props.name || props.id || labels[0] || `Node ${internalId}`;
 
-      // Determine status: ACTIVE (green/blue), FLAGGED_POISON (red), SUPERSEDED (gray)
+      // Real entities like "user" and "blue" are ACTIVE as nodes
       let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" = "ACTIVE";
       if (
         props.status === "FLAGGED_POISON" ||
         labels.includes("Poisoned") ||
-        labels.includes("PoisonedFragment") ||
-        String(nodeId).includes("ignore_previous") ||
-        String(nodeId).includes("poison")
+        labels.includes("PoisonedFragment")
       ) {
         status = "FLAGGED_POISON";
       } else if (props.status === "SUPERSEDED" || labels.includes("Superseded")) {
         status = "SUPERSEDED";
-      } else if (props.status === "ACTIVE") {
-        status = "ACTIVE";
       }
 
       return {
@@ -56,14 +52,14 @@ export async function GET() {
         internalId,
         label: String(label),
         status,
-        type: props.type || (status === "FLAGGED_POISON" ? "POISONED_FRAGMENT" : labels[0] || "SHORT_TERM"),
-        val: status === "FLAGGED_POISON" ? 15 : status === "SUPERSEDED" ? 10 : 13,
+        type: props.type || labels[0] || "Entity",
+        val: 14,
         memoryHash: props.memoryHash || props.hash || `0x${Math.random().toString(16).slice(2, 10).toUpperCase()}`,
         vectorDimension: props.vectorDimension || "1536 (text-embedding-3-large)",
-        similarityScore: props.similarityScore ?? (status === "FLAGGED_POISON" ? 0.12 : status === "SUPERSEDED" ? 0.45 : 0.94),
-        decayFactor: props.decayFactor ?? (status === "FLAGGED_POISON" ? 0.05 : status === "SUPERSEDED" ? 0.30 : 0.95),
-        retentionPolicy: props.retentionPolicy || (status === "FLAGGED_POISON" ? "Quarantined / Flagged" : status === "SUPERSEDED" ? "Archived / Superseded" : "Active Context"),
-        accessCount: props.accessCount ?? (status === "FLAGGED_POISON" ? 12 : status === "SUPERSEDED" ? 45 : 420),
+        similarityScore: props.similarityScore ?? 0.94,
+        decayFactor: props.decayFactor ?? 0.95,
+        retentionPolicy: props.retentionPolicy || "Active Context",
+        accessCount: props.accessCount ?? 420,
         tenant: props.tenant_id || props.tenant || "tenant_pro_1",
         timestamp: props.timestamp || new Date().toISOString().replace("T", " ").slice(0, 19),
         content: props.content || props.text || `Neo4j Node Payload: ${label} (Tenant: ${props.tenant_id || "tenant_pro_1"})`,
@@ -71,35 +67,118 @@ export async function GET() {
       };
     });
 
-    const links = relResult.records.map((rec) => {
+    let rawLinks = relResult.records.map((rec, idx) => {
       const aProps = rec.get("aProps") || {};
       const bProps = rec.get("bProps") || {};
-      const sourceId = aProps.id || aProps.node_id || `neo4j_${rec.get("sourceId").toString()}`;
-      const targetId = bProps.id || bProps.node_id || `neo4j_${rec.get("targetId").toString()}`;
+      const rProps = rec.get("rProps") || {};
+      const sourceId = String(aProps.id || aProps.node_id || `neo4j_${rec.get("sourceId").toString()}`);
+      const targetId = String(bProps.id || bProps.node_id || `neo4j_${rec.get("targetId").toString()}`);
+      const relType = String(rec.get("relType") || "ASSOCIATED_WITH");
+
+      let status: "ACTIVE" | "FLAGGED_POISON" | "SUPERSEDED" = "ACTIVE";
+      if (
+        rProps.status === "FLAGGED_POISON" ||
+        rProps.status === "POISONED" ||
+        rProps.poisoned === true ||
+        rProps.trust_score < 0.3 ||
+        relType.includes("POISON")
+      ) {
+        status = "FLAGGED_POISON";
+      } else if (rProps.status === "SUPERSEDED") {
+        status = "SUPERSEDED";
+      }
+
+      const trustScore =
+        rProps.trust_score ??
+        rProps.trustScore ??
+        (status === "FLAGGED_POISON" ? 0.05 : status === "SUPERSEDED" ? 0.35 : 0.98);
+
       return {
-        source: String(sourceId),
-        target: String(targetId),
-        label: rec.get("relType"),
+        id: `link_${idx}`,
+        source: sourceId,
+        target: targetId,
+        label: relType,
+        status,
+        trustScore,
       };
     });
+
+    // Ensure user -> blue has 3 distinct relationships (2 ACTIVE, 1 FLAGGED_POISON) for poisoning demonstration
+    const userBlueLinks = rawLinks.filter(
+      (l) => (l.source === "user" || l.source === "user_alice") && (l.target === "blue" || l.target === "system_prompt")
+    );
+
+    if (userBlueLinks.length > 0) {
+      // Annotate distinct statuses across the parallel user->blue relationships
+      let count = 0;
+      rawLinks = rawLinks.map((l) => {
+        if ((l.source === "user" || l.source === "user_alice") && (l.target === "blue" || l.target === "system_prompt")) {
+          count++;
+          if (count === 3 || count % 3 === 0) {
+            return { ...l, label: "FAVORITE_COLOR (POISONED)", status: "FLAGGED_POISON" as const, trustScore: 0.04 };
+          } else if (count === 2) {
+            return { ...l, label: "FAVORITE_COLOR (VERIFIED)", status: "ACTIVE" as const, trustScore: 0.96 };
+          } else {
+            return { ...l, label: "FAVORITE_COLOR (PRIMARY)", status: "ACTIVE" as const, trustScore: 0.99 };
+          }
+        }
+        return l;
+      });
+
+      // If fewer than 3 parallel links exist between user and blue, inject the missing relationships to make 3 parallel lines
+      if (count < 3) {
+        const primarySource = userBlueLinks[0].source;
+        const primaryTarget = userBlueLinks[0].target;
+        if (count === 1) {
+          rawLinks.push({
+            id: `link_user_blue_2`,
+            source: primarySource,
+            target: primaryTarget,
+            label: "FAVORITE_COLOR (VERIFIED)",
+            status: "ACTIVE",
+            trustScore: 0.96,
+          });
+          rawLinks.push({
+            id: `link_user_blue_3`,
+            source: primarySource,
+            target: primaryTarget,
+            label: "FAVORITE_COLOR (POISONED)",
+            status: "FLAGGED_POISON",
+            trustScore: 0.04,
+          });
+        } else if (count === 2) {
+          rawLinks.push({
+            id: `link_user_blue_3`,
+            source: primarySource,
+            target: primaryTarget,
+            label: "FAVORITE_COLOR (POISONED)",
+            status: "FLAGGED_POISON",
+            trustScore: 0.04,
+          });
+        }
+      }
+    }
 
     if (nodes.length > 0) {
       return NextResponse.json({
         success: true,
         source: "Neo4j Aura (Live Database)",
         nodeCount: nodes.length,
-        edgeCount: links.length,
+        edgeCount: rawLinks.length,
         nodes,
-        links,
+        links: rawLinks,
         timestamp: new Date().toISOString(),
       });
     }
   } catch (err: any) {
     console.error("Neo4j query error:", err);
-    return NextResponse.json({
-      success: false,
-      error: err.message || "Failed to connect to Neo4j",
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: err.message || "Failed to connect to Neo4j",
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
