@@ -61,15 +61,15 @@ export default function DashboardOverview() {
   const [dbSource, setDbSource] = useState("Loading Telemetry...");
 
   const [metrics, setMetrics] = useState<OverviewMetrics>({
-    shieldedRequests: "4,892,104",
-    shieldedRequestsGrowth: "+14.2%",
-    blockedThreats: "1,284",
-    highSeverityInjections: 12,
-    memoryIntegrity: "98.4%",
-    nodesSynced: "1,420",
+    shieldedRequests: "0",
+    shieldedRequestsGrowth: "0.0%",
+    blockedThreats: "0",
+    highSeverityInjections: 0,
+    memoryIntegrity: "100.0%",
+    nodesSynced: "0",
     enforcedPolicies: "24 / 24",
     activeRulesText: "PII & Provenance Active",
-    latencyMs: "3.8ms",
+    latencyMs: "0.0ms",
   });
 
   const [chartData, setChartData] = useState<ChartBar[]>([
