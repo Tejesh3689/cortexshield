@@ -38,7 +38,7 @@ async def extract_triplets(text: str) -> List[Triplet]:
     response = await client.beta.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a cognitive triplet extractor. Extract knowledge from the user's input as discrete (subject, predicate, object) triplets."},
+            {"role": "system", "content": "You are a cognitive triplet extractor. Extract knowledge from the user's input as discrete (subject, predicate, object) triplets.\n\nThe subject of every extracted triplet must be 'user' when the fact is about the person speaking (their preferences, possessions, relationships, attributes), even if the sentence structure implies a possessive phrase like 'my pet dog.' Represent possessive relationships as compound predicates instead of compound subjects — e.g. for 'my pet dog's name is Rex', extract subject='user', predicate='PET_DOG_NAME', object='rex' — NOT subject='user\\'s pet dog'. Only use a subject other than 'user' when the fact explicitly describes a third party or external entity, not the user themselves.\n\nExamples:\n- 'my pet dog's name is Rex' -> subject='user', predicate='PET_DOG_NAME', object='rex'\n- 'my favorite color is blue' -> subject='user', predicate='FAVORITE_COLOR', object='blue'\n- 'Apple was founded by Steve Jobs' -> subject='apple', predicate='FOUNDED_BY', object='steve jobs'"},
             {"role": "user", "content": text}
         ],
         response_format=ExtractionResponse,

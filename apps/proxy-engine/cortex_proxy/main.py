@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from neo4j import GraphDatabase
 
 # Load env vars before doing anything else
-load_dotenv()
+from pathlib import Path
+service_dir = Path(__file__).resolve().parent.parent
+repo_root = service_dir.parent.parent
+load_dotenv(repo_root / ".env")
+load_dotenv(service_dir / ".env", override=True)
 
 from .ingress.jsonrpc_interceptor import process_jsonrpc
 from .db import get_db_session
