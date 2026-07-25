@@ -12,6 +12,7 @@ import {
   X,
   RotateCcw,
   Zap,
+  GripHorizontal,
 } from "lucide-react";
 
 // Dynamically import react-force-graph-2d to prevent SSR canvas issues
@@ -36,6 +37,7 @@ export interface MemoryNode {
 
 export interface MemoryLink {
   id?: string;
+  elementId?: string;
   source: string | MemoryNode;
   target: string | MemoryNode;
   label: string;
@@ -44,7 +46,7 @@ export interface MemoryLink {
   curvature?: number;
 }
 
-// Preset cluster positions so graph renders instantly as separated islands by default without 3-node seed intermediate state
+// Preset cluster positions so graph renders instantly as separated islands by default
 const PRESET_CLUSTER_COORDINATES: Record<string, { x: number; y: number }> = {
   // Cluster 1: user & blue (Bottom Center)
   user: { x: -30, y: 140 },
@@ -185,13 +187,13 @@ const SEED_MEMORY_NODES: MemoryNode[] = assignPresetCoordinates([
 ]);
 
 const SEED_MEMORY_LINKS: MemoryLink[] = [
-  { source: "user", target: "blue", label: "FAVORITE_COLOR (PRIMARY)", status: "ACTIVE", trustScore: 0.98 },
-  { source: "user", target: "blue", label: "FAVORITE_COLOR (VERIFIED)", status: "ACTIVE", trustScore: 0.95 },
-  { source: "user", target: "blue", label: "FAVORITE_COLOR (POISONED)", status: "FLAGGED_POISON", trustScore: 0.04 },
-  { source: "user_alice", target: "admin_role", label: "HAS_ROLE", status: "ACTIVE", trustScore: 0.96 },
-  { source: "user_bob", target: "sales_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.94 },
-  { source: "user_bob", target: "engineering_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.92 },
-  { source: "system_prompt", target: "ignore_previous_instructions", label: "INJECTION_ATTEMPT", status: "FLAGGED_POISON", trustScore: 0.02 },
+  { id: "link_user_blue_1", source: "user", target: "blue", label: "FAVORITE_COLOR (PRIMARY)", status: "ACTIVE", trustScore: 0.98 },
+  { id: "link_user_blue_2", source: "user", target: "blue", label: "FAVORITE_COLOR (VERIFIED)", status: "ACTIVE", trustScore: 0.95 },
+  { id: "link_user_blue_3", source: "user", target: "blue", label: "FAVORITE_COLOR (POISONED)", status: "FLAGGED_POISON", trustScore: 0.04 },
+  { id: "link_alice_admin", source: "user_alice", target: "admin_role", label: "HAS_ROLE", status: "ACTIVE", trustScore: 0.96 },
+  { id: "link_bob_sales", source: "user_bob", target: "sales_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.94 },
+  { id: "link_bob_eng", source: "user_bob", target: "engineering_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.92 },
+  { id: "link_sys_inj", source: "system_prompt", target: "ignore_previous_instructions", label: "INJECTION_ATTEMPT", status: "FLAGGED_POISON", trustScore: 0.02 },
 ];
 
 export default function MemoryGraphView() {
@@ -209,6 +211,21 @@ export default function MemoryGraphView() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Self-healing remediation state
+  const [isHealingEdge, setIsHealingEdge] = useState(false);
+  const [healError, setHealError] = useState<string | null>(null);
+  const [healSuccessMsg, setHealSuccessMsg] = useState<string | null>(null);
+
+  // Draggable Legend position state
+  const [legendPos, setLegendPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDraggingLegend, setIsDraggingLegend] = useState(false);
+  const dragStartRef = useRef<{ mouseX: number; mouseY: number; elemX: number; elemY: number }>({
+    mouseX: 0,
+    mouseY: 0,
+    elemX: 0,
+    elemY: 0,
+  });
+
   const fgRef = useRef<any>(null);
 
   // Fetch real data from Neo4j API
@@ -225,9 +242,6 @@ export default function MemoryGraphView() {
           links: json.links || [],
         });
         setDataSource(json.source || "Neo4j Aura (Live)");
-        if (positionedNodes.length > 0) {
-          setSelectedNode(positionedNodes[0]);
-        }
       } else {
         console.warn("Neo4j API empty or errored, using seed nodes");
         setDataSource("Seed Fallback (Neo4j Standby)");
@@ -253,6 +267,91 @@ export default function MemoryGraphView() {
 
     return () => clearTimeout(timer);
   }, [fetchGraphData]);
+
+  // Legend Dragging Logic
+  const handleLegendMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const parentRect = (e.currentTarget.parentElement as HTMLElement)?.getBoundingClientRect() || { left: 0, top: 0 };
+
+    const currentX = legendPos ? legendPos.x : rect.left - parentRect.left;
+    const currentY = legendPos ? legendPos.y : rect.top - parentRect.top;
+
+    dragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      elemX: currentX,
+      elemY: currentY,
+    };
+    setIsDraggingLegend(true);
+  };
+
+  useEffect(() => {
+    if (!isDraggingLegend) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - dragStartRef.current.mouseX;
+      const deltaY = e.clientY - dragStartRef.current.mouseY;
+      setLegendPos({
+        x: dragStartRef.current.elemX + deltaX,
+        y: dragStartRef.current.elemY + deltaY,
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingLegend(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingLegend]);
+
+  // Self-Healing Handler for Poisoned Edges
+  const handleHealEdge = async () => {
+    if (!selectedLink) return;
+    setIsHealingEdge(true);
+    setHealError(null);
+    setHealSuccessMsg(null);
+
+    try {
+      const edgeIdToHeal = selectedLink.id || selectedLink.elementId || "link_user_blue_3";
+      const res = await fetch("/api/graph/heal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ edge_element_id: edgeIdToHeal }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setHealSuccessMsg("Poisoned edge remediated! Status changed to SUPERSEDED.");
+
+        // Immediately update selectedLink UI state
+        setSelectedLink((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "SUPERSEDED",
+                label: prev.label.replace("(POISONED)", "(SUPERSEDED)"),
+                trustScore: 0.35,
+              }
+            : null
+        );
+
+        // Refetch Neo4j graph data to visually flip edge color from red to gray
+        await fetchGraphData();
+      } else {
+        setHealError(json.error || "Failed to remediate poisoned edge.");
+      }
+    } catch (err: any) {
+      setHealError(err.message || "Network error while remediating edge.");
+    } finally {
+      setIsHealingEdge(false);
+    }
+  };
 
   const filteredNodes = useMemo(() => {
     return graphData.nodes.filter((node) => {
@@ -316,6 +415,8 @@ export default function MemoryGraphView() {
   const handleNodeClick = (node: any) => {
     setSelectedNode(node);
     setSelectedLink(null);
+    setHealError(null);
+    setHealSuccessMsg(null);
     setIsDrawerOpen(true);
     if (fgRef.current) {
       fgRef.current.centerAt(node.x, node.y, 800);
@@ -326,6 +427,8 @@ export default function MemoryGraphView() {
   const handleLinkClick = (link: any) => {
     setSelectedLink(link);
     setSelectedNode(null);
+    setHealError(null);
+    setHealSuccessMsg(null);
     setIsDrawerOpen(true);
   };
 
@@ -389,16 +492,9 @@ export default function MemoryGraphView() {
     ctx.fillStyle = isPoisoned ? "#fca5a5" : "#e2e8f0";
     ctx.fillText(label, node.x, node.y + radius + 4 + bckgDimensions[1] / 2);
   };
-  if (!isMounted) {
-    return (
-      <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-slate-800 border-t-[#10b981] rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
-    <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans" suppressHydrationWarning>
+    <div className="relative w-full h-[calc(100vh-65px)] bg-[#0b0f19] overflow-hidden select-none font-sans">
       {/* Top Floating Control Bar */}
       <div className="absolute top-4 left-6 right-6 z-20 flex flex-wrap items-center justify-between gap-4 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3 rounded-2xl shadow-xl">
         <div className="flex items-center gap-3">
@@ -473,25 +569,34 @@ export default function MemoryGraphView() {
         </div>
       </div>
 
-      {/* Floating Legend Box with Distinct Node vs Relationship Edge Legend */}
-      <div className="absolute bottom-6 left-6 z-20 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300">
-        <div>
-          <span className="font-bold text-white text-[11px] uppercase tracking-wider block mb-1.5">
+      {/* Movable / Draggable Floating Legend Box */}
+      <div
+        onMouseDown={handleLegendMouseDown}
+        style={
+          legendPos
+            ? { position: "absolute", left: `${legendPos.x}px`, top: `${legendPos.y}px`, bottom: "auto" }
+            : { position: "absolute", bottom: "24px", left: "24px" }
+        }
+        className="z-20 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300 cursor-grab active:cursor-grabbing select-none hover:border-[#2a3c5a] transition-colors"
+      >
+        <div className="flex items-center justify-between border-b border-[#1b273d] pb-1.5">
+          <span className="font-bold text-white text-[11px] uppercase tracking-wider">
             Node Entity Status
           </span>
-          <div className="flex items-center gap-4 text-[11px]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              <span>Active Entity</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-              <span>Flagged Node</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]" />
-              <span>Superseded</span>
-            </div>
+          <span title="Drag to move legend"><GripHorizontal size={14} className="text-slate-500 hover:text-slate-300" /></span>
+        </div>
+        <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+            <span>Active Entity</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444] shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+            <span>Flagged Node</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]" />
+            <span>Superseded</span>
           </div>
         </div>
 
@@ -651,6 +756,43 @@ export default function MemoryGraphView() {
                   </span>
                 </div>
               </div>
+
+              {/* Remediate Poisoned Edge Button - ONLY visible for FLAGGED_POISON edges */}
+              {selectedLink.status === "FLAGGED_POISON" && (
+                <div className="pt-2 space-y-2">
+                  <button
+                    onClick={handleHealEdge}
+                    disabled={isHealingEdge}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-950/50 border border-red-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
+                  >
+                    {isHealingEdge ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin text-red-200" />
+                        <span>Remediating Poisoned Edge...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert size={15} className="text-red-200 group-hover:scale-110 transition-transform" />
+                        <span>Remediate Poisoned Edge</span>
+                      </>
+                    )}
+                  </button>
+
+                  {healError && (
+                    <div className="p-2.5 bg-red-950/80 border border-red-800/60 rounded-xl text-red-300 text-[11px] flex items-center gap-2">
+                      <AlertTriangle size={14} className="text-red-400 shrink-0" />
+                      <span>{healError}</span>
+                    </div>
+                  )}
+
+                  {healSuccessMsg && (
+                    <div className="p-2.5 bg-emerald-950/80 border border-emerald-800/60 rounded-xl text-emerald-300 text-[11px] flex items-center gap-2">
+                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                      <span>{healSuccessMsg}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : selectedNode ? (
             /* Entity Node Details Card */

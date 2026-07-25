@@ -151,6 +151,26 @@ export async function GET() {
       }
     }
 
+    // Apply remediated edge status overrides from in-memory cache
+    const { remediatedEdgeIds } = await import("./remediationStore");
+    rawLinks = rawLinks.map((l) => {
+      const edgeIdStr = String(l.id || "");
+      const isHealed =
+        remediatedEdgeIds.has(edgeIdStr) ||
+        remediatedEdgeIds.has(l.label) ||
+        Array.from(remediatedEdgeIds).some((healedId) => healedId && (edgeIdStr.includes(healedId) || healedId.includes(edgeIdStr)));
+
+      if (isHealed) {
+        return {
+          ...l,
+          label: l.label.replace("(POISONED)", "(SUPERSEDED)"),
+          status: "SUPERSEDED" as const,
+          trustScore: 0.35,
+        };
+      }
+      return l;
+    });
+
     if (nodes.length > 0) {
       return NextResponse.json({
         success: true,
