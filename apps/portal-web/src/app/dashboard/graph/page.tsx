@@ -276,6 +276,10 @@ export default function MemoryGraphView() {
 
   // Legend Dragging Logic
   const handleLegendMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.nativeEvent) {
+      e.nativeEvent.stopImmediatePropagation();
+    }
     if (e.button !== 0) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const parentRect = (e.currentTarget.parentElement as HTMLElement)?.getBoundingClientRect() || { left: 0, top: 0 };
@@ -296,6 +300,8 @@ export default function MemoryGraphView() {
     if (!isDraggingLegend) return;
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.stopPropagation();
+      if (e.stopImmediatePropagation) e.stopImmediatePropagation();
       const deltaX = e.clientX - dragStartRef.current.mouseX;
       const deltaY = e.clientY - dragStartRef.current.mouseY;
       setLegendPos({
@@ -304,15 +310,16 @@ export default function MemoryGraphView() {
       });
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      e.stopPropagation();
       setIsDraggingLegend(false);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mousemove", handleMouseMove, true);
+    window.addEventListener("mouseup", handleMouseUp, true);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove, true);
+      window.removeEventListener("mouseup", handleMouseUp, true);
     };
   }, [isDraggingLegend]);
 
@@ -416,6 +423,12 @@ export default function MemoryGraphView() {
       };
     });
   }, [graphData.links, filteredNodes]);
+
+  // Memoize graphData object reference to prevent ForceGraph2D from resetting camera on legend position state changes
+  const forceGraphData = useMemo(() => ({
+    nodes: filteredNodes,
+    links: filteredLinksWithCurvature,
+  }), [filteredNodes, filteredLinksWithCurvature]);
 
   // Click Handlers
   const handleNodeClick = (node: any) => {
@@ -575,15 +588,32 @@ export default function MemoryGraphView() {
         </div>
       </div>
 
+      {/* Fullscreen Backdrop overlay while dragging legend box to absorb all canvas events */}
+      {isDraggingLegend && (
+        <div
+          className="fixed inset-0 z-25 bg-transparent cursor-grabbing select-none"
+          onMouseMove={(e) => e.stopPropagation()}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+            setIsDraggingLegend(false);
+          }}
+        />
+      )}
+
       {/* Movable / Draggable Floating Legend Box */}
       <div
         onMouseDown={handleLegendMouseDown}
+        onPointerDown={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         style={
           legendPos
             ? { position: "absolute", left: `${legendPos.x}px`, top: `${legendPos.y}px`, bottom: "auto" }
             : { position: "absolute", bottom: "24px", left: "24px" }
         }
-        className="z-20 bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300 cursor-grab active:cursor-grabbing select-none hover:border-[#2a3c5a] transition-colors"
+        className={`${
+          isDraggingLegend ? "z-30 cursor-grabbing" : "z-20 cursor-grab"
+        } bg-[#0e1424]/90 backdrop-blur-md border border-[#1b273d] p-3.5 rounded-2xl shadow-xl space-y-2.5 text-xs text-slate-300 select-none hover:border-[#2a3c5a] transition-colors`}
       >
         <div className="flex items-center justify-between border-b border-[#1b273d] pb-1.5">
           <span className="font-bold text-white text-[11px] uppercase tracking-wider">
@@ -640,7 +670,7 @@ export default function MemoryGraphView() {
         {isMounted && (
           <ForceGraph2D
             ref={fgRef}
-            graphData={{ nodes: filteredNodes, links: filteredLinksWithCurvature }}
+            graphData={forceGraphData}
             nodeCanvasObject={drawNodeCanvas}
             nodePointerAreaPaint={(node: any, color, ctx) => {
               ctx.fillStyle = color;
@@ -651,6 +681,9 @@ export default function MemoryGraphView() {
             warmupTicks={200}
             cooldownTicks={0}
             cooldownTime={0}
+            enablePointerInteraction={!isDraggingLegend}
+            enableZoomInteraction={!isDraggingLegend}
+            enablePanInteraction={!isDraggingLegend}
             onNodeClick={handleNodeClick}
             onLinkClick={handleLinkClick}
             // 1. Color Edges based on relationship status
