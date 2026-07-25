@@ -1,0 +1,197 @@
+{
+  "table_exists": true,
+  "schema": [
+    {
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "default": "CURRENT_TIMESTAMP",
+      "nullable": "YES"
+    },
+    {
+      "column": "shielded_requests",
+      "type": "bigint",
+      "default": "4892104",
+      "nullable": "NO"
+    },
+    {
+      "column": "blocked_threats",
+      "type": "bigint",
+      "default": "1284",
+      "nullable": "NO"
+    },
+    {
+      "column": "high_severity_injections",
+      "type": "integer",
+      "default": "12",
+      "nullable": "NO"
+    },
+    {
+      "column": "enforced_policies",
+      "type": "integer",
+      "default": "24",
+      "nullable": "NO"
+    },
+    {
+      "column": "total_policies",
+      "type": "integer",
+      "default": "24",
+      "nullable": "NO"
+    },
+    {
+      "column": "latency_ms",
+      "type": "numeric",
+      "default": "3.8",
+      "nullable": "NO"
+    },
+    {
+      "column": "id",
+      "type": "character varying",
+      "default": null,
+      "nullable": "NO"
+    }
+  ],
+  "rows": [
+    {
+      "id": "global_metrics",
+      "shielded_requests": "4892104",
+      "blocked_threats": "1284",
+      "high_severity_injections": "12",
+      "enforced_policies": "24",
+      "total_policies": "24",
+      "latency_ms": "3.80",
+      "updated_at": "2026-07-25 02:19:46.062942+00:00"
+    }
+  ],
+  "global_metrics_row": {
+    "id": "global_metrics",
+    "shielded_requests": "4892104",
+    "blocked_threats": "1284",
+    "high_severity_injections": "12",
+    "enforced_policies": "24",
+    "total_policies": "24",
+    "latency_ms": "3.80",
+    "updated_at": "2026-07-25 02:19:46.062942+00:00"
+  },
+  "api_response": {
+    "success": true,
+    "isDbConnected": true,
+    "dbSource": "Neon Postgres & Neo4j Aura (100% Live DB)",
+    "timeframe": "24h",
+    "metrics": {
+      "shieldedRequests": "48,92,104",
+      "shieldedRequestsGrowth": "+14.2%",
+      "blockedThreats": "1,284",
+      "highSeverityInjections": 12,
+      "memoryIntegrity": "100.0%",
+      "nodesSynced": "9",
+      "enforcedPolicies": "24 / 24",
+      "activeRulesText": "PII & Provenance Active",
+      "latencyMs": "3.80ms"
+    },
+    "chartData": [
+      {
+        "time": "00:00",
+        "val": 35,
+        "threat": false
+      },
+      {
+        "time": "02:00",
+        "val": 50,
+        "threat": false
+      },
+      {
+        "time": "04:00",
+        "val": 28,
+        "threat": false
+      },
+      {
+        "time": "06:00",
+        "val": 85,
+        "threat": true
+      },
+      {
+        "time": "08:00",
+        "val": 40,
+        "threat": false
+      },
+      {
+        "time": "10:00",
+        "val": 65,
+        "threat": false
+      },
+      {
+        "time": "12:00",
+        "val": 95,
+        "threat": true
+      },
+      {
+        "time": "14:00",
+        "val": 45,
+        "threat": false
+      },
+      {
+        "time": "16:00",
+        "val": 75,
+        "threat": false
+      },
+      {
+        "time": "18:00",
+        "val": 30,
+        "threat": false
+      },
+      {
+        "time": "20:00",
+        "val": 60,
+        "threat": false
+      },
+      {
+        "time": "22:00",
+        "val": 90,
+        "threat": true
+      }
+    ],
+    "liveLogs": [
+      {
+        "status": "BLOCKED",
+        "type": "FIREWALL_DECISION",
+        "ip": "192.168.0.100",
+        "rule": "decision_6b7683f1580c22deda25399c7863f611",
+        "time": "340 mins ago",
+        "color": "border-red-500/40 text-red-400 bg-red-950/20"
+      },
+      {
+        "status": "BLOCKED",
+        "type": "FIREWALL_DECISION",
+        "ip": "192.168.7.119",
+        "rule": "decision_d015bab89d4042abdb107328c0476d71",
+        "time": "365 mins ago",
+        "color": "border-red-500/40 text-red-400 bg-red-950/20"
+      },
+      {
+        "status": "BLOCKED",
+        "type": "FIREWALL_DECISION",
+        "ip": "192.168.14.138",
+        "rule": "decision_0b402f0e26cf6c3b6b31c8d7b5353425",
+        "time": "365 mins ago",
+        "color": "border-red-500/40 text-red-400 bg-red-950/20"
+      },
+      {
+        "status": "BLOCKED",
+        "type": "FIREWALL_DECISION",
+        "ip": "192.168.21.157",
+        "rule": "decision_49a697730b68eee1a4f3a4fa66875bd2",
+        "time": "1022 mins ago",
+        "color": "border-red-500/40 text-red-400 bg-red-950/20"
+      }
+    ],
+    "threatVectors": [
+      {
+        "label": "FIREWALL_DECISION",
+        "pct": 100,
+        "color": "bg-cyan-400",
+        "textColor": "text-cyan-400"
+      }
+    ],
+    "timestamp": "2026-07-25T02:23:31.111Z"
+  }
+}

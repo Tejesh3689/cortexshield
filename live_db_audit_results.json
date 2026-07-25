@@ -1,0 +1,482 @@
+{
+  "postgres": {
+    "db_name": "neondb",
+    "user": "neondb_owner",
+    "version": "PostgreSQL 18.4 (2773af8) on aarch64-unknown-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+    "tables": {
+      "alembic_version": {
+        "count": 1,
+        "columns": [
+          "version_num"
+        ],
+        "first_10_rows": [
+          [
+            "004_workos_sso"
+          ]
+        ]
+      },
+      "api_keys": {
+        "count": 24,
+        "columns": [
+          "id",
+          "tenant_id",
+          "key_hash",
+          "created_at",
+          "revoked_at"
+        ],
+        "first_10_rows": [
+          [
+            "key_df66ba35",
+            "tenant_pro_1",
+            "f2c9859c9add1137a8c09856f7fede3199cb7f354e7e807d270b3e58e1f9b41f",
+            null,
+            null
+          ],
+          [
+            "key_cc45899e",
+            "tenant_growth_1",
+            "867b2177f3e29be511f8950635cf286db933f6c25459f053e83e69814fe50812",
+            null,
+            null
+          ],
+          [
+            "key_59f603bc",
+            "tenant_ent_1",
+            "116d071e97adc02785e61db950cbc6348c0b2690e3a10029edc6d775c52a92fd",
+            null,
+            null
+          ],
+          [
+            "key_61335ccb",
+            "tenant_pro_1",
+            "1ad8ab139a827733f833d3cad42a16371e30eb724b1defde521cd36344256205",
+            null,
+            null
+          ],
+          [
+            "key_c57172d9",
+            "tenant_growth_1",
+            "2e64e333926dba351e8b13c885d3a9f014819138082bae3c5bb42126bbfb3316",
+            null,
+            null
+          ],
+          [
+            "key_42590b32",
+            "tenant_ent_1",
+            "20af20194b80834790740aac2910075d1af45940c4d7ca143bf90626272f0265",
+            null,
+            null
+          ],
+          [
+            "key_04bf0dd1",
+            "tenant_pro_1",
+            "27f75295dac9943ee5ce0b8e59949510cfa5d99ec6e36b9070045c9db86bfd97",
+            null,
+            null
+          ],
+          [
+            "key_dc082984",
+            "tenant_growth_1",
+            "8158aa05d73352280f083a10567fed674384d4f55a7d50fce27da120d6542260",
+            null,
+            null
+          ],
+          [
+            "key_36af9f36",
+            "tenant_ent_1",
+            "c3e089c55e9dfcde8763334cfe4420cacd7d21523535795100fd036d4c6259c2",
+            null,
+            null
+          ],
+          [
+            "key_1a51bf4b",
+            "tenant_pro_1",
+            "e9606598aa6167724d4031fcc39d04150108f034f8a6718088ebd73be6481b82",
+            null,
+            null
+          ]
+        ]
+      },
+      "audit_log_index": {
+        "count": 23,
+        "columns": [
+          "id",
+          "tenant_id",
+          "event_type",
+          "event_ref",
+          "prev_hash",
+          "this_hash",
+          "created_at"
+        ],
+        "first_10_rows": [
+          [
+            "cd625cc1-5811-4deb-b359-fd3c70a8dbe4",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_a93d9eb8807eb7da9befcbad067f0961",
+            null,
+            "4d094765efbf22305f0750eeb20da6f96e3895fb76bb21bc1e247b6aaa0aed0d",
+            "2026-07-24T13:43:51.262727"
+          ],
+          [
+            "30d55bb9-9a11-4444-9fe2-ca89ac8bc6bc",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_84562b03e8c1401aff903607f3573d8e",
+            "4d094765efbf22305f0750eeb20da6f96e3895fb76bb21bc1e247b6aaa0aed0d",
+            "9b1ffe42c4d252229f72af477c7cdf993d9be7762ea5ec838a740a82ddac02c3",
+            "2026-07-24T13:50:15.178483"
+          ],
+          [
+            "a6bd3312-2f3b-43e4-ae49-4d5d85688164",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_50a67eddaf96c19a9098d28ff10e71c6",
+            "9b1ffe42c4d252229f72af477c7cdf993d9be7762ea5ec838a740a82ddac02c3",
+            "179fbb35ea38dfbfee9c48450de226fcc1c3f2728b125f67a1c2e6aec845de3c",
+            "2026-07-24T13:51:57.766577"
+          ],
+          [
+            "874aeb1f-a111-4375-bc65-9fc8acc71b37",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_42258cac9d198fca838d6c6f0da12acc",
+            "179fbb35ea38dfbfee9c48450de226fcc1c3f2728b125f67a1c2e6aec845de3c",
+            "b3d20ab533c97aa04012578c38339f143699573afa59c8f60d00f3314c5174f5",
+            "2026-07-24T14:03:47.079933"
+          ],
+          [
+            "755a3231-6b14-4dd4-9fb6-80cf081afdd8",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_1cb50b2db10d71dfeafd15c44f87c5a9",
+            "b3d20ab533c97aa04012578c38339f143699573afa59c8f60d00f3314c5174f5",
+            "e05ad8b75dfa71ba0dd230b4087f395b0de4641c201b5d2300c3c445c002fead",
+            "2026-07-24T14:05:56.280311"
+          ],
+          [
+            "4afa6d01-2300-4c83-bfcb-c6126842536d",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_50105657cb98483c584d763ff3041194",
+            "e05ad8b75dfa71ba0dd230b4087f395b0de4641c201b5d2300c3c445c002fead",
+            "05a60643f3f584d27be96f6edc6b8c3303cdcd94de668904413469dfe427604d",
+            "2026-07-24T14:07:44.317463"
+          ],
+          [
+            "4a1b61eb-f8b1-4ebc-915e-e07eb8b146ee",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_251bf38ecadd8dc61f32cd066954fb7b",
+            "05a60643f3f584d27be96f6edc6b8c3303cdcd94de668904413469dfe427604d",
+            "91c206fa1718aa79e0915a9c8cc17fc233cb2a1948de3bf995dab9d43eee7a6f",
+            "2026-07-24T14:08:39.642610"
+          ],
+          [
+            "8874ffb9-0edf-4cf6-929b-c25495bf3bce",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_3bfddbebb5cdaeb866cb9b43fb051e16",
+            "91c206fa1718aa79e0915a9c8cc17fc233cb2a1948de3bf995dab9d43eee7a6f",
+            "0735fd709b5b0ea21f873d002360d02725e5c8427a0dbbb10b1f18c96e18eb82",
+            "2026-07-24T14:16:25.805297"
+          ],
+          [
+            "1e1730b8-a5fc-47b8-b1e2-37534f96bf94",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_630e094ae2b309d2a9abcbeeb6f8b0d0",
+            "0735fd709b5b0ea21f873d002360d02725e5c8427a0dbbb10b1f18c96e18eb82",
+            "cfc474345d026c4cbb61c8ed1aa05f6cc2360b2888f34b0cd858e6d80d844309",
+            "2026-07-24T14:16:28.053790"
+          ],
+          [
+            "a16bbf40-39e3-4abd-aa29-e14493fc79f2",
+            "tenant_pro_1",
+            "firewall_decision",
+            "decision_0a691395f6ec6b4ed6ef72222642811d",
+            "cfc474345d026c4cbb61c8ed1aa05f6cc2360b2888f34b0cd858e6d80d844309",
+            "f3722b73465fb225ce0868114ae77fa12a036fa4f32b84f39e534c636ea53111",
+            "2026-07-24T14:16:58.529373"
+          ]
+        ]
+      },
+      "tenant_overrides": {
+        "count": 0,
+        "columns": [
+          "tenant_id",
+          "rule_type",
+          "rule_value",
+          "created_at",
+          "updated_at"
+        ],
+        "first_10_rows": []
+      },
+      "tenants": {
+        "count": 3,
+        "columns": [
+          "id",
+          "name",
+          "tier",
+          "neo4j_database_name",
+          "created_at",
+          "stripe_customer_id",
+          "provisioning_status",
+          "domain",
+          "workos_org_id"
+        ],
+        "first_10_rows": [
+          [
+            "tenant_pro_1",
+            "Acme Pro",
+            "pro",
+            "neo4j",
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "tenant_growth_1",
+            "Globex Growth",
+            "growth",
+            "neo4j_tenant_growth_1",
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "tenant_ent_1",
+            "Initech Enterprise",
+            "enterprise",
+            "neo4j_tenant_ent_1",
+            null,
+            null,
+            null,
+            null,
+            null
+          ]
+        ]
+      },
+      "usage_counters": {
+        "count": 0,
+        "columns": [
+          "tenant_id",
+          "period_start",
+          "operation_count",
+          "tool_call_count",
+          "reported"
+        ],
+        "first_10_rows": []
+      },
+      "users": {
+        "count": 0,
+        "columns": [
+          "id",
+          "tenant_id",
+          "created_at"
+        ],
+        "first_10_rows": []
+      }
+    }
+  },
+  "neo4j": {
+    "uri": "neo4j+s://744ad83e.databases.neo4j.io",
+    "total_nodes": 9,
+    "total_relationships": 7,
+    "labels": [
+      "Entity"
+    ],
+    "relationship_types": [
+      "HAS_ROLE",
+      "WORKS_IN",
+      "INSTRUCTS",
+      "FAVORITE_COLOR"
+    ],
+    "sample_nodes": [
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:2",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "user"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:3",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "blue"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:7",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "user_alice"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:8",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "admin_role"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:9",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "user_bob"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:10",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "sales_dept"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:11",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "engineering_dept"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:12",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "system_prompt"
+        }
+      },
+      {
+        "id": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:13",
+        "labels": [
+          "Entity"
+        ],
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "ignore_previous_instructions"
+        }
+      }
+    ],
+    "sample_relationships": [
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:2",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:3",
+        "type": "FAVORITE_COLOR",
+        "props": {
+          "created_at": "2026-07-25T01:47:56.352000000+00:00",
+          "trust_score": 1.0,
+          "status": "ACTIVE"
+        }
+      },
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:2",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:3",
+        "type": "FAVORITE_COLOR",
+        "props": {
+          "created_at": "2026-07-25T01:48:17.500000000+00:00",
+          "trust_score": 1.0,
+          "status": "ACTIVE"
+        }
+      },
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:2",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:3",
+        "type": "FAVORITE_COLOR",
+        "props": {
+          "created_at": "2026-07-25T02:13:07.047000000+00:00",
+          "trust_score": 0.05,
+          "status": "FLAGGED_POISON"
+        }
+      },
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:7",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:8",
+        "type": "HAS_ROLE",
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "source": "admin_panel",
+          "trust_score": 0.95,
+          "status": "ACTIVE"
+        }
+      },
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:9",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:10",
+        "type": "WORKS_IN",
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "superseded_by": "rel_bob_engineering",
+          "trust_score": 0.8,
+          "status": "SUPERSEDED"
+        }
+      },
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:9",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:11",
+        "type": "WORKS_IN",
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "id": "rel_bob_engineering",
+          "trust_score": 0.9,
+          "status": "ACTIVE"
+        }
+      },
+      {
+        "source": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:12",
+        "target": "4:8e198320-ca80-4703-9fdd-8d470ad83b7f:13",
+        "type": "INSTRUCTS",
+        "props": {
+          "tenant_id": "tenant_pro_1",
+          "anomaly_reason": "Detected jailbreak attempt matching prior cycle",
+          "source": "untrusted_user_input",
+          "trust_score": 0.05,
+          "status": "FLAGGED_POISON"
+        }
+      }
+    ]
+  },
+  "redis": {
+    "connected": true,
+    "total_keys": 0,
+    "keys_list": [],
+    "used_memory_human": "0.000B",
+    "redis_version": "8.2.0",
+    "sample_key_details": {}
+  },
+  "qdrant": {
+    "connected": true,
+    "collections_count": 0,
+    "collections": {}
+  }
+}

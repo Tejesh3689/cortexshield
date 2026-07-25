@@ -17,13 +17,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || DUMMY_CLERK_KEY;
+  const envKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const isClerkConfigured = Boolean(envKey && envKey.startsWith("pk_") && envKey !== DUMMY_CLERK_KEY && envKey.length > 30);
+  const publishableKey = envKey || DUMMY_CLERK_KEY;
 
-  return (
-    <ClerkProvider publishableKey={key}>
-      <html lang="en">
-        <body className={inter.className}>{children}</body>
-      </html>
-    </ClerkProvider>
+  const bodyContent = (
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>{children}</body>
+    </html>
   );
+
+  if (isClerkConfigured) {
+    return <ClerkProvider publishableKey={publishableKey}>{bodyContent}</ClerkProvider>;
+  }
+
+  return bodyContent;
 }
