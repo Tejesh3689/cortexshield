@@ -230,6 +230,7 @@ export default function MemoryGraphView() {
   const [selectedLink, setSelectedLink] = useState<MemoryLink | null>(SEED_MEMORY_LINKS[2]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [graphViewMode, setGraphViewMode] = useState<"OBSIDIAN" | "DETAILED">("OBSIDIAN");
 
   // Self-healing remediation state
   const [isHealingEdge, setIsHealingEdge] = useState(false);
@@ -683,66 +684,95 @@ export default function MemoryGraphView() {
     }
   };
 
-  // Custom Node Canvas Renderer (Obsidian Graph Visual Style)
+  // Custom Node Canvas Renderer (Supports both Obsidian View & Detailed View modes)
   const drawNodeCanvas = (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const label = node.label || node.id;
     const isMain = node.isMainNode;
     const isHub = node.isHub || node.val >= 12;
-    const fontSize = (isMain ? 13 : isHub ? 10.5 : 9) / globalScale;
-    ctx.font = `${isMain || isHub ? "bold" : "normal"} ${fontSize}px Inter, sans-serif`;
 
     const isPoisoned = node.status === "FLAGGED_POISON";
     const isSuperseded = node.status === "SUPERSEDED";
     const isExternalFetch = node.status === "EXTERNAL_FETCH" || node.origin === "EXTERNAL_FETCH" || node.type === "EXTERNAL_FETCH";
-    const radius = isMain ? 12 : isHub ? 8.5 : 5.5;
 
-    // Outer Glow Ring (Obsidian Ambient Aura)
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, radius + (isMain ? 7 : isHub ? 5 : 3), 0, 2 * Math.PI, false);
-    if (isPoisoned) {
-      ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
-    } else if (isSuperseded) {
-      ctx.fillStyle = "rgba(100, 116, 139, 0.2)";
-    } else if (isExternalFetch) {
-      ctx.fillStyle = "rgba(168, 85, 247, 0.35)";
+    if (graphViewMode === "OBSIDIAN") {
+      // 1. OBSIDIAN VIEW MODE (Clean, sleek, star-dot constellation style)
+      const radius = isMain ? 5.5 : isHub ? 4 : 2.5;
+
+      // Outer Ambient Aura Ring
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius + (isMain ? 3.5 : isHub ? 2.5 : 1.5), 0, 2 * Math.PI, false);
+      if (isPoisoned) {
+        ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
+      } else if (isSuperseded) {
+        ctx.fillStyle = "rgba(100, 116, 139, 0.2)";
+      } else if (isExternalFetch) {
+        ctx.fillStyle = "rgba(168, 85, 247, 0.35)";
+      } else {
+        ctx.fillStyle = isMain ? "rgba(16, 185, 129, 0.45)" : "rgba(16, 185, 129, 0.2)";
+      }
+      ctx.fill();
+
+      // Star Dot Body
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+      ctx.fillStyle = isPoisoned ? "#ef4444" : isSuperseded ? "#64748b" : isExternalFetch ? "#a855f7" : node.color || "#10b981";
+      ctx.fill();
+      ctx.lineWidth = 0.8 / globalScale;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.stroke();
+
+      // Sleek Typography Label (NO dark background rectangle box!)
+      const fontSize = (isMain ? 10 : isHub ? 9 : 8) / globalScale;
+      ctx.font = `${isMain || isHub ? "bold" : "normal"} ${fontSize}px Inter, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = isPoisoned ? "#fca5a5" : isExternalFetch ? "#e9d5ff" : isMain ? "#ffffff" : "rgba(226, 232, 240, 0.85)";
+      ctx.fillText(label, node.x, node.y + radius + 2.5);
     } else {
-      ctx.fillStyle = isMain ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)";
+      // 2. DETAILED VIEW MODE (Previous design with large spheres & dark background text badges)
+      const radius = isMain ? 13 : isHub ? 9 : 6.5;
+      const fontSize = (isMain ? 12 : isHub ? 10.5 : 9) / globalScale;
+      ctx.font = `${isMain || isHub ? "bold" : "normal"} ${fontSize}px Inter, sans-serif`;
+
+      // Outer Glow Ring
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius + (isMain ? 7 : isHub ? 5 : 3), 0, 2 * Math.PI, false);
+      if (isPoisoned) {
+        ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
+      } else if (isSuperseded) {
+        ctx.fillStyle = "rgba(100, 116, 139, 0.2)";
+      } else if (isExternalFetch) {
+        ctx.fillStyle = "rgba(168, 85, 247, 0.35)";
+      } else {
+        ctx.fillStyle = isMain ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)";
+      }
+      ctx.fill();
+
+      // Main Sphere Body
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+      ctx.fillStyle = isPoisoned ? "#ef4444" : isSuperseded ? "#64748b" : isExternalFetch ? "#a855f7" : node.color || "#10b981";
+      ctx.fill();
+      ctx.lineWidth = (isMain ? 2.5 : 1.5) / globalScale;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+
+      // Text Badge Box
+      const textWidth = ctx.measureText(label).width;
+      const bckgDimensions = [textWidth + 8, fontSize + 4];
+      ctx.fillStyle = "rgba(8, 13, 26, 0.85)";
+      ctx.fillRect(
+        node.x - bckgDimensions[0] / 2,
+        node.y + radius + 4,
+        bckgDimensions[0],
+        bckgDimensions[1]
+      );
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = isPoisoned ? "#fca5a5" : isExternalFetch ? "#e9d5ff" : "#e2e8f0";
+      ctx.fillText(label, node.x, node.y + radius + 4 + bckgDimensions[1] / 2);
     }
-    ctx.fill();
-
-    // Node Main Body
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-    if (isPoisoned) {
-      ctx.fillStyle = "#ef4444";
-    } else if (isSuperseded) {
-      ctx.fillStyle = "#64748b";
-    } else if (isExternalFetch) {
-      ctx.fillStyle = "#a855f7";
-    } else {
-      ctx.fillStyle = node.color || "#10b981";
-    }
-    ctx.fill();
-    ctx.lineWidth = (isMain ? 2.5 : 1.5) / globalScale;
-    ctx.strokeStyle = "#ffffff";
-    ctx.stroke();
-
-    // Text Label Shadow Box
-    const textWidth = ctx.measureText(label).width;
-    const bckgDimensions = [textWidth + 8, fontSize + 4];
-
-    ctx.fillStyle = "rgba(8, 13, 26, 0.85)";
-    ctx.fillRect(
-      node.x - bckgDimensions[0] / 2,
-      node.y + radius + 4,
-      bckgDimensions[0],
-      bckgDimensions[1]
-    );
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = isPoisoned ? "#fca5a5" : isExternalFetch ? "#e9d5ff" : "#e2e8f0";
-    ctx.fillText(label, node.x, node.y + radius + 4 + bckgDimensions[1] / 2);
   };
 
   return (
@@ -811,6 +841,32 @@ export default function MemoryGraphView() {
                 {status === "FLAGGED_POISON" ? "POISON" : status === "EXTERNAL_FETCH" ? "EXT FETCH" : status}
               </button>
             ))}
+          </div>
+
+          {/* Graph View Switcher Mode Buttons */}
+          <div className="flex items-center bg-[#131b2e] p-1 rounded-xl border border-[#202e48]">
+            <button
+              onClick={() => setGraphViewMode("OBSIDIAN")}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 ${
+                graphViewMode === "OBSIDIAN"
+                  ? "bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/50 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Obsidian Star Constellation View"
+            >
+              <span>✨</span> Obsidian View
+            </button>
+            <button
+              onClick={() => setGraphViewMode("DETAILED")}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 ${
+                graphViewMode === "DETAILED"
+                  ? "bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/50 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Detailed Spheres & Badges View"
+            >
+              <span>🔍</span> Detailed View
+            </button>
           </div>
 
           {/* Reset Zoom Button */}
@@ -951,7 +1007,7 @@ export default function MemoryGraphView() {
             nodePointerAreaPaint={(node: any, color, ctx) => {
               ctx.fillStyle = color;
               ctx.beginPath();
-              ctx.arc(node.x, node.y, (node.isHub ? 9 : 5.5) + 5, 0, 2 * Math.PI, false);
+              ctx.arc(node.x, node.y, (node.isMainNode ? 6 : 4) + 6, 0, 2 * Math.PI, false);
               ctx.fill();
             }}
             warmupTicks={200}
@@ -966,14 +1022,25 @@ export default function MemoryGraphView() {
             onNodeDragEnd={handleNodeDragEnd}
             // 1. Color Edges based on relationship status & origin
             linkColor={(link: any) => {
-              if (link.status === "FLAGGED_POISON") return "#ef4444"; // Vibrant Red for Poison
-              if (link.status === "SUPERSEDED") return "#64748b"; // Muted Slate Gray
-              if (link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" || link.label?.includes("EXTERNAL")) return "#a855f7"; // Vibrant Purple for External Fetch
-              return "#10b981"; // Emerald Green / Teal for Active
+              if (graphViewMode === "OBSIDIAN") {
+                if (link.status === "FLAGGED_POISON") return "rgba(239, 68, 68, 0.75)";
+                if (link.status === "SUPERSEDED") return "rgba(100, 116, 139, 0.3)";
+                if (link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" || link.label?.includes("EXTERNAL")) return "rgba(168, 85, 247, 0.75)";
+                return "rgba(16, 185, 129, 0.35)";
+              }
+              if (link.status === "FLAGGED_POISON") return "#ef4444";
+              if (link.status === "SUPERSEDED") return "#64748b";
+              if (link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" || link.label?.includes("EXTERNAL")) return "#a855f7";
+              return "#10b981";
             }}
             // 2. Render Parallel Edges as visually distinct curves using curvature offset
             linkCurvature={(link: any) => link.curvature || 0}
-            linkWidth={(link: any) => (link.status === "FLAGGED_POISON" ? 3.8 : link.status === "SUPERSEDED" ? 1.8 : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? 3.0 : 2.5)}
+            linkWidth={(link: any) => {
+              if (graphViewMode === "OBSIDIAN") {
+                return link.status === "FLAGGED_POISON" ? 1.4 : link.status === "SUPERSEDED" ? 0.5 : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? 1.2 : 0.8;
+              }
+              return link.status === "FLAGGED_POISON" ? 3.5 : link.status === "SUPERSEDED" ? 1.8 : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? 3.0 : 2.5;
+            }}
             linkDirectionalParticles={(link: any) => (link.status === "FLAGGED_POISON" ? 4 : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? 3 : link.status === "ACTIVE" ? 2 : 0)}
             linkDirectionalParticleSpeed={(link: any) => (link.status === "FLAGGED_POISON" ? 0.008 : link.status === "EXTERNAL_FETCH" ? 0.006 : 0.004)}
             linkDirectionalParticleColor={(link: any) => (link.status === "FLAGGED_POISON" ? "#ef4444" : link.status === "EXTERNAL_FETCH" || link.origin === "EXTERNAL_FETCH" ? "#a855f7" : "#10b981")}
