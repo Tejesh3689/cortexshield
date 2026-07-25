@@ -44,7 +44,7 @@ export interface MemoryLink {
   curvature?: number;
 }
 
-// Preset cluster positions so graph renders instantly as separated islands (Image 2) without initial central clumping (Image 1)
+// Preset cluster positions so graph renders instantly as separated islands by default without 3-node seed intermediate state
 const PRESET_CLUSTER_COORDINATES: Record<string, { x: number; y: number }> = {
   // Cluster 1: user & blue (Bottom Center)
   user: { x: -30, y: 140 },
@@ -81,7 +81,7 @@ function assignPresetCoordinates(nodes: MemoryNode[]): MemoryNode[] {
   });
 }
 
-// Fallback memory nodes seed dataset if API is loading or offline
+// Complete multi-cluster node dataset so default view matches final state immediately
 const SEED_MEMORY_NODES: MemoryNode[] = assignPresetCoordinates([
   {
     id: "user",
@@ -106,6 +106,61 @@ const SEED_MEMORY_NODES: MemoryNode[] = assignPresetCoordinates([
     content: "Entity: blue (Active entity node target)",
   },
   {
+    id: "user_alice",
+    label: "user_alice",
+    status: "ACTIVE",
+    type: "Entity",
+    color: "#10b981",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:00:00",
+    content: "User Alice entity node with active role permissions.",
+  },
+  {
+    id: "admin_role",
+    label: "admin_role",
+    status: "ACTIVE",
+    type: "Entity",
+    color: "#10b981",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:00:00",
+    content: "System Administrator role entity node.",
+  },
+  {
+    id: "user_bob",
+    label: "user_bob",
+    status: "ACTIVE",
+    type: "Entity",
+    color: "#10b981",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:00:00",
+    content: "User Bob entity node associated with sales and engineering.",
+  },
+  {
+    id: "sales_dept",
+    label: "sales_dept",
+    status: "ACTIVE",
+    type: "Entity",
+    color: "#10b981",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:00:00",
+    content: "Sales Department organizational node.",
+  },
+  {
+    id: "engineering_dept",
+    label: "engineering_dept",
+    status: "ACTIVE",
+    type: "Entity",
+    color: "#10b981",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:00:00",
+    content: "Engineering Department organizational node.",
+  },
+  {
     id: "system_prompt",
     label: "system_prompt",
     status: "ACTIVE",
@@ -116,13 +171,27 @@ const SEED_MEMORY_NODES: MemoryNode[] = assignPresetCoordinates([
     timestamp: "2026-07-25 07:00:00",
     content: "System instruction guardrail root entity.",
   },
+  {
+    id: "ignore_previous_instructions",
+    label: "ignore_previous_instructions",
+    status: "FLAGGED_POISON",
+    type: "POISONED_FRAGMENT",
+    color: "#ef4444",
+    val: 14,
+    tenant: "tenant_pro_1",
+    timestamp: "2026-07-25 07:00:00",
+    content: "Poisoned prompt injection fragment detected.",
+  },
 ]);
 
 const SEED_MEMORY_LINKS: MemoryLink[] = [
   { source: "user", target: "blue", label: "FAVORITE_COLOR (PRIMARY)", status: "ACTIVE", trustScore: 0.98 },
   { source: "user", target: "blue", label: "FAVORITE_COLOR (VERIFIED)", status: "ACTIVE", trustScore: 0.95 },
   { source: "user", target: "blue", label: "FAVORITE_COLOR (POISONED)", status: "FLAGGED_POISON", trustScore: 0.04 },
-  { source: "user", target: "system_prompt", label: "ISSUES_INSTRUCTION", status: "ACTIVE", trustScore: 0.92 },
+  { source: "user_alice", target: "admin_role", label: "HAS_ROLE", status: "ACTIVE", trustScore: 0.96 },
+  { source: "user_bob", target: "sales_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.94 },
+  { source: "user_bob", target: "engineering_dept", label: "MEMBER_OF", status: "ACTIVE", trustScore: 0.92 },
+  { source: "system_prompt", target: "ignore_previous_instructions", label: "INJECTION_ATTEMPT", status: "FLAGGED_POISON", trustScore: 0.02 },
 ];
 
 export default function MemoryGraphView() {
