@@ -47,6 +47,7 @@ async def process_memory_write_job(job: MemoryWriteJob) -> None:
         # Step 1: Poison Check & Trust Score
         trust_score, is_poison = check_poison(job.raw_text, job.origin_source)
         triplets = await extract_triplets(job.raw_text)
+        logger.info(f"Extracted Triplets for {job.job_id}: {triplets}")
 
         if not triplets:
             logger.info(f"No triplets extracted for job {job.job_id} — skipping graph write.")
