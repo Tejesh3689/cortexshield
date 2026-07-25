@@ -21,6 +21,7 @@ members = [
     "cortexshield",
     "policy-service",
     "proxy-engine",
+    "realtime-gateway",
 ]
 
 [[package]]
@@ -58,7 +59,23 @@ wheels = [
 [[package]]
 name = "anomaly-service"
 version = "0.1.0"
-source = { virtual = "apps/anomaly-service" }
+source = { editable = "apps/anomaly-service" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "redis" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.111.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "redis", specifier = ">=5.0.0" },
+    { name = "uvicorn", specifier = ">=0.30.1" },
+]
 
 [[package]]
 name = "anyio"
@@ -125,18 +142,26 @@ wheels = [
 [[package]]
 name = "billing-service"
 version = "0.1.0"
-source = { virtual = "apps/billing-service" }
+source = { editable = "apps/billing-service" }
 dependencies = [
+    { name = "asyncpg" },
     { name = "cortex-db" },
     { name = "fastapi" },
+    { name = "python-dotenv" },
+    { name = "redis" },
+    { name = "sqlalchemy" },
     { name = "stripe" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "asyncpg", specifier = ">=0.28.0" },
     { name = "cortex-db", editable = "libs/cortex_db" },
     { name = "fastapi", specifier = ">=0.100.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "redis", specifier = ">=5.0.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "stripe", specifier = ">=6.0.0" },
     { name = "uvicorn", specifier = ">=0.23.0" },
 ]
@@ -372,6 +397,7 @@ source = { editable = "apps/healing-worker" }
 dependencies = [
     { name = "cortex-neo4j-client" },
     { name = "cortex-schemas" },
+    { name = "httpx" },
     { name = "networkx" },
     { name = "openai" },
     { name = "qdrant-client" },
@@ -381,6 +407,7 @@ dependencies = [
 requires-dist = [
     { name = "cortex-neo4j-client", editable = "libs/cortex_neo4j_client" },
     { name = "cortex-schemas", editable = "libs/cortex_schemas" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "networkx" },
     { name = "openai", specifier = ">=2.48.0" },
     { name = "qdrant-client" },
@@ -1487,6 +1514,29 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/65/45/5b1bdd15a3c7730eefb9c113600829e20d689b82b5a23f9e07d107094004/qdrant_client-1.18.0.tar.gz", hash = "sha256:52e8ece1a7d40519801bf0b70713bfa0f6b7ae28c7275bbe0b0286fbed7f6db4", size = 352580, upload-time = "2026-05-11T14:12:38.702Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d6/10/c437bd2ac41ef30d3019063e6ce537dc111e9214473b337ee88f7fa6359a/qdrant_client-1.18.0-py3-none-any.whl", hash = "sha256:093aa8cf8a420ee3ad2a68b007e1378d7992b2600e0b53c193fc172674f659cd", size = 398126, upload-time = "2026-05-11T14:12:36.998Z" },
+]
+
+[[package]]
+name = "realtime-gateway"
+version = "0.1.0"
+source = { editable = "apps/realtime-gateway" }
+dependencies = [
+    { name = "asyncpg" },
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "pyjwt" },
+    { name = "python-dotenv" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncpg", specifier = ">=0.28.0" },
+    { name = "fastapi", specifier = ">=0.111.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyjwt", specifier = ">=2.8.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "uvicorn", specifier = ">=0.30.1" },
 ]
 
 [[package]]

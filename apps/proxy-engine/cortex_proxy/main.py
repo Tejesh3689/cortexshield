@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import hashlib
 import os
+import uuid
 from fastapi import FastAPI, Request, Header, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -113,29 +114,29 @@ class HealRequest(BaseModel):
 @app.post("/api/graph/heal")
 async def heal_edge(
     body: HealRequest,
+    header_tenant_id: str = Header(None, alias="x-tenant-id"),
+    header_agent_id: str = Header(None, alias="x-agent-id"),
+    query_tenant_id: str = Query(None, alias="tenant_id"),
+    query_agent_id: str = Query(None, alias="agent_id"),
+    db: AsyncSession = Depends(get_db_session),
     _auth: bool = Depends(verify_api_key)
 ):
     """
     Administrative override: marks a specific Neo4j relationship as SUPERSEDED
     by its elementId. Intended for the 'Remediate Poisoned Edge' demo button.
-
-    This is a direct administrative action — it does NOT run the trust-scoring
-    or poison-check pipeline. Auth check (valid API key) still required.
-
-    ADR note: Routed in proxy-engine (main.py) alongside /rpc because:
-      1. proxy-engine already owns the API key auth dependency.
-      2. Avoids adding a new FastAPI service for a single admin endpoint.
-      3. Neo4j driver is already initialised in this process via cortex_neo4j_client.
-
-    Body:  {"edge_element_id": "<neo4j elementId string>"}
-    200:   {"success": true, "new_status": "SUPERSEDED"}
-    404:   {"detail": "No relationship found with elementId <id>"}
     """
+    tenant_id = query_tenant_id or header_tenant_id
+    agent_id = query_agent_id or header_agent_id
+    
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Missing tenant_id (header or query)")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="Missing agent_id (header or query)")
+
     edge_id = body.edge_element_id.strip()
     logger.info(f"heal_edge called for elementId={edge_id!r}")
 
     neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    # Aura uses neo4j+s:// — rewrite to ssc to skip Windows cert chain validation
     if neo4j_uri.startswith("neo4j+s://"):
         neo4j_uri = neo4j_uri.replace("neo4j+s://", "neo4j+ssc://", 1)
 
@@ -145,26 +146,65 @@ async def heal_edge(
     try:
         driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
         with driver.session() as session:
-            result = session.run(
+            # 1. Check if edge exists and belongs to tenant
+            check_result = session.run(
                 """
-                MATCH ()-[r]->()
-                WHERE elementId(r) = $edge_element_id
-                SET r.status = 'SUPERSEDED', r.superseded_at = datetime()
-                RETURN r.status AS new_status
+                MATCH (s)-[r]->() WHERE elementId(r) = $edge_element_id
+                RETURN s.tenant_id AS edge_tenant
                 """,
                 edge_element_id=edge_id
             )
+            check_record = check_result.single()
+            
+            if check_record is None:
+                driver.close()
+                raise HTTPException(status_code=404, detail=f"No relationship found with elementId '{edge_id}'")
+            
+            if check_record["edge_tenant"] != tenant_id:
+                driver.close()
+                raise HTTPException(status_code=403, detail="Edge belongs to a different tenant")
+
+            # 2. Update edge status
+            result = session.run(
+                """
+                MATCH ()-[r]->() WHERE elementId(r) = $edge_element_id
+                AND EXISTS { MATCH (s {tenant_id: $tenant_id})-[r]->() }
+                SET r.status = 'SUPERSEDED', r.superseded_at = datetime(),
+                    r.healed_by = $agent_id
+                RETURN r.status AS new_status
+                """,
+                edge_element_id=edge_id,
+                tenant_id=tenant_id,
+                agent_id=agent_id
+            )
             record = result.single()
         driver.close()
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Neo4j error in heal_edge: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Neo4j error: {str(e)}")
 
     if record is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No relationship found with elementId '{edge_id}'"
+        raise HTTPException(status_code=500, detail="Update failed unexpectedly")
+
+    # 3. Write to Postgres audit_log_index
+    try:
+        event_id = str(uuid.uuid4())
+        this_hash = hashlib.sha256(f"manual_heal:{edge_id}:{tenant_id}".encode()).hexdigest()
+        await db.execute(
+            text("""
+            INSERT INTO audit_log_index (id, tenant_id, event_type, event_ref, this_hash)
+            VALUES (:id, :tenant_id, 'manual_heal', :edge_element_id, :this_hash)
+            """),
+            {"id": event_id, "tenant_id": tenant_id, "edge_element_id": edge_id, "this_hash": this_hash}
         )
+        await db.commit()
+        logger.info(f"heal_edge: audit row written id={event_id}")
+    except Exception as e:
+        logger.error(f"Postgres error in heal_edge audit log: {e}", exc_info=True)
+        # Do not fail the request if audit logging fails
 
     logger.info(f"heal_edge: elementId={edge_id!r} -> new_status={record['new_status']}")
     return {"success": True, "new_status": record["new_status"]}
+

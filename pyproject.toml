@@ -20,6 +20,7 @@ members = [
     "apps/anomaly-service",
     "apps/policy-service",
     "apps/billing-service",
+    "apps/realtime-gateway",
     "libs/*"
 ]
 

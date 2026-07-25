@@ -1,0 +1,1 @@
+"""CortexShield Realtime Gateway package."""
