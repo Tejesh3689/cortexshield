@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Header, HTTPException
+from fastapi import FastAPI, Request, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 import logging
 from dotenv import load_dotenv
@@ -24,9 +24,28 @@ app = FastAPI(title="CortexShield Proxy Engine", lifespan=lifespan)
 @app.post("/rpc")
 async def handle_tool_call(
     request: Request,
-    tenant_id: str = Header(..., alias="x-tenant-id"),
-    agent_id: str = Header(..., alias="x-agent-id")
+    header_tenant_id: str = Header(None, alias="x-tenant-id"),
+    header_agent_id: str = Header(None, alias="x-agent-id"),
+    query_tenant_id: str = Query(None, alias="tenant_id"),
+    query_agent_id: str = Query(None, alias="agent_id"),
+    authorization: str = Header(None),
+    api_key: str = Query(None)
 ):
+    # Fallback logic for tenant and agent IDs
+    tenant_id = query_tenant_id or header_tenant_id
+    agent_id = query_agent_id or header_agent_id
+    
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Missing tenant_id (header or query)")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="Missing agent_id (header or query)")
+    # Hackathon workaround: accept API key in query param or Authorization header
+    token = api_key
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    if not token or not token.startswith("sk_pro_"):
+        raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API key")
     """
     Main ingress endpoint for intercepting tool calls (JSON-RPC format).
     Requires x-tenant-id and x-agent-id headers.

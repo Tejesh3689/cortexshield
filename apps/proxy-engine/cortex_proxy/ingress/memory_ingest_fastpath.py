@@ -56,4 +56,4 @@ async def handle_add_memory(
             "Ensure cortex_healing is installed as a path dependency in proxy-engine/pyproject.toml."
         )
 
-    return ToolCallResponse(id=request.id, result={"status": "accepted"})
+    return ToolCallResponse(id=request.id, result={"content": [{"type": "text", "text": "Memory ingestion queued successfully."}], "isError": False})
