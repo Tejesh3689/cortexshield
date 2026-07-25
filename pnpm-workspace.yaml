@@ -1,5 +1,6 @@
 packages:
   - "apps/portal-web"
+  - "apps/landing-web"
   - "packages/*"
 allowBuilds:
   '@clerk/shared': true
