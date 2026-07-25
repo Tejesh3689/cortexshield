@@ -13,6 +13,8 @@ def get_driver() -> Driver:
     global _driver_instance
     if _driver_instance is None:
         uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        if uri.startswith("neo4j+s://"):
+            uri = uri.replace("neo4j+s://", "neo4j+ssc://")
         user = os.getenv("NEO4J_USER", "neo4j")
         password = os.getenv("NEO4J_PASSWORD", "localdevpassword")
         
