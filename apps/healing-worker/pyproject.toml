@@ -7,7 +7,8 @@ dependencies = [
     "cortex_schemas",
     "cortex_neo4j_client",
     "networkx",
-    "qdrant-client"
+    "qdrant-client",
+    "openai>=2.48.0",
 ]
 
 [tool.uv.sources]

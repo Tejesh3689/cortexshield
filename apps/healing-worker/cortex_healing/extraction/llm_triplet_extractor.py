@@ -30,8 +30,20 @@ def check_poison(raw_text: str, origin: OriginSource) -> Tuple[float, bool]:
         return 0.2, False
     return 0.8, False
 
+from openai import AsyncOpenAI
+
 async def extract_triplets(text: str) -> List[Triplet]:
-    # Mock LLM for hackathon Python 3.14 build compatibility
-    return [
-        Triplet(subject="user", predicate="favorite_color", object="blue")
-    ]
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    response = await client.beta.chat.completions.parse(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are a cognitive triplet extractor. Extract knowledge from the user's input as discrete (subject, predicate, object) triplets."},
+            {"role": "user", "content": text}
+        ],
+        response_format=ExtractionResponse,
+    )
+    
+    if response.choices[0].message.parsed:
+        return response.choices[0].message.parsed.triplets
+    return []
