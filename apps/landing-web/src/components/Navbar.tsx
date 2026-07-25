@@ -20,9 +20,8 @@ const publicLinks = [
 
 const accountLinks = [
   { label: 'Overview', to: '/overview' },
-  { label: 'Connectors', to: '/connectors' },
-  { label: 'Agents', to: '/agents' },
-  { label: 'Deployments', to: '/deployments' },
+  { label: 'Cognitive Graph', to: '/graph' },
+  { label: 'Security', to: '/security-workspace' },
   { label: 'Profile', to: '/profile' },
   { label: 'Billing', to: '/billing' },
   { label: 'API Keys', to: '/api-keys' },

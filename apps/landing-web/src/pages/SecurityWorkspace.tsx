@@ -1,21 +1,21 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck, Lock, Radar, TerminalSquare, Activity } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Lock, Radar, TerminalSquare, Activity, RefreshCw } from 'lucide-react';
 import { WorkspaceShell } from '../components/WorkspaceShell';
+import { useOverview } from '../hooks/useOverview';
+import { useAuditLogs } from '../hooks/useAuditLogs';
 
-const securityCards = [
-  { label: 'Overall score', value: '97/100', detail: 'Excellent posture' },
-  { label: 'Threat detections', value: '24', detail: 'Blocked today' },
-  { label: 'Prompt injection', value: '0', detail: 'No active incidents' },
-  { label: 'Compliance', value: 'SOC 2', detail: 'Fully aligned' }
-];
+export const SecurityWorkspace: React.FC = () => {
+  const { data: overview, isLoading: overviewLoading } = useOverview('24h');
+  const { data: auditData, isLoading: auditLoading } = useAuditLogs();
 
-const events = [
-  { title: 'Firewall policy updated', time: '12 mins ago', risk: 'Low' },
-  { title: 'Suspicious token pattern detected', time: '42 mins ago', risk: 'High' },
-  { title: 'Session rotated', time: '1 hr ago', risk: 'Info' }
-];
+  const securityCards = [
+    { label: 'Overall score', value: overview ? '97/100' : '-', detail: 'Excellent posture' },
+    { label: 'Threat detections', value: overview?.metrics.blockedThreats || '-', detail: 'Blocked today' },
+    { label: 'Prompt injection', value: overview?.metrics.highSeverityInjections.toString() || '-', detail: overview?.metrics.highSeverityInjections ? 'Incidents logged' : 'No active incidents' },
+    { label: 'Policies', value: overview?.metrics.enforcedPolicies || '-', detail: 'Fully aligned' }
+  ];
 
-export const SecurityWorkspace: React.FC = () => (
+  return (
   <WorkspaceShell
     title="Security Center"
     description="Monitor the health of your organization’s trust layer with live risk signals, controls, and policy coverage."
@@ -43,21 +43,34 @@ export const SecurityWorkspace: React.FC = () => (
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6">
+        <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6 relative min-h-[300px]">
+          {auditLoading && (
+            <div className="absolute inset-0 bg-[#0B1220]/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-[2rem]">
+              <RefreshCw className="h-6 w-6 text-indigo-500 animate-spin" />
+            </div>
+          )}
           <div className="flex items-center gap-2 text-indigo-300">
             <Radar className="h-4 w-4" />
             <p className="text-xs font-semibold uppercase tracking-[0.32em]">Threat activity</p>
           </div>
           <div className="mt-5 space-y-4">
-            {events.map((event) => (
-              <div key={event.title} className="flex items-start justify-between rounded-[1.5rem] border border-white/10 bg-[#0B1220]/70 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-white">{event.title}</p>
-                  <p className="mt-1 text-sm text-slate-400">{event.time}</p>
+            {auditData?.logs && auditData.logs.length > 0 ? auditData.logs.slice(0, 5).map((event) => {
+              const isHighRisk = event.event_type.includes('INJECTION') || event.event_type.includes('POISON');
+              return (
+                <div key={event.id} className="flex items-start justify-between rounded-[1.5rem] border border-white/10 bg-[#0B1220]/70 p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{event.event_type}</p>
+                    <p className="mt-1 text-sm text-slate-400 font-mono text-[10px] truncate max-w-[250px]">{event.event_ref}</p>
+                    <p className="mt-1 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${isHighRisk ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-white/10 text-slate-300'}`}>
+                    {isHighRisk ? 'High' : 'Info'}
+                  </span>
                 </div>
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-300">{event.risk}</span>
-              </div>
-            ))}
+              );
+            }) : (
+              <div className="p-4 text-center text-sm text-slate-500 border border-white/5 bg-white/5 rounded-2xl">No recent threats logged</div>
+            )}
           </div>
         </div>
       </div>
@@ -110,4 +123,6 @@ export const SecurityWorkspace: React.FC = () => (
       </div>
     </div>
   </WorkspaceShell>
-);
+  );
+};
+

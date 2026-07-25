@@ -1,20 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { ShieldCheck, Mail, Lock, ArrowRight, ShieldAlert, Check, Sparkles, Globe, GitBranch } from 'lucide-react';
-
-interface LoginProps {
-  onSignIn: (email: string, rememberMe: boolean) => void;
-  isAuthenticated: boolean;
-  userEmail: string;
-}
+import { ShieldCheck, Mail, Lock, ArrowRight, ShieldAlert, Check, Sparkles, Globe, GitBranch, Key } from 'lucide-react';
+import { useAuth } from '../lib/AuthContext';
 
 type AuthMode = 'signin' | 'signup' | 'forgot';
 
-export const Login: React.FC<LoginProps> = ({ onSignIn, isAuthenticated, userEmail }) => {
+export const Login: React.FC = () => {
+  const { isAuthenticated, userEmail, signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState(userEmail || 'name@company.com');
+  const [apiKey, setApiKey] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -41,7 +38,7 @@ export const Login: React.FC<LoginProps> = ({ onSignIn, isAuthenticated, userEma
     }
   }, [location.search]);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
     setMessage('');
@@ -61,27 +58,42 @@ export const Login: React.FC<LoginProps> = ({ onSignIn, isAuthenticated, userEma
       return;
     }
 
+    if (mode === 'signin' && !apiKey.trim()) {
+      setError('Please provide your workspace API key.');
+      return;
+    }
+
     setLoading(true);
 
-    window.setTimeout(() => {
-      setLoading(false);
-      if (mode === 'forgot') {
+    if (mode === 'forgot') {
+      window.setTimeout(() => {
+        setLoading(false);
         setMessage(`Password reset instructions have been sent to ${email}.`);
-        return;
-      }
+      }, 700);
+      return;
+    }
 
-      onSignIn(email, rememberMe);
-      navigate('/overview', { replace: true });
-    }, 700);
+    try {
+      // In a real app, signup would call an endpoint to create a tenant and return an API key.
+      // For this environment, we auto-provision a mock developer key.
+      const keyToUse = mode === 'signup' ? 'sk_live_cortexshield_5521a0d8f28b4ee99c3' : apiKey;
+
+      const success = await signIn(keyToUse, email, rememberMe);
+      if (success) {
+        navigate('/overview', { replace: true });
+      } else {
+        setError(mode === 'signup' ? 'Failed to provision workspace.' : 'Invalid API Key. Access denied by Proxy Engine.');
+        setLoading(false);
+      }
+    } catch {
+      setError('Network error validating API key.');
+      setLoading(false);
+    }
   };
 
   const handleSocialSignIn = (provider: 'Google' | 'GitHub') => {
-    setLoading(true);
-    window.setTimeout(() => {
-      setLoading(false);
-      onSignIn(`${provider.toLowerCase()}-user@agentos.ai`, rememberMe);
-      navigate('/overview', { replace: true });
-    }, 600);
+    // Social sign-in requires an API key in this hackathon environment
+    setError(`Social sign-in disabled. Please use your API key.`);
   };
 
   return (
@@ -172,6 +184,23 @@ export const Login: React.FC<LoginProps> = ({ onSignIn, isAuthenticated, userEma
               </div>
             </div>
 
+            {mode === 'signin' ? (
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Workspace API Key</label>
+                <div className="relative mt-2">
+                  <Key className="absolute top-3 left-3.5 h-4 w-4 text-slate-500" />
+                  <input
+                    type="password"
+                    required
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="w-full rounded-xl border border-white/5 bg-white/5 py-2.5 pr-4 pl-10 text-xs text-white outline-hidden transition-all hover:bg-white/7.5 focus:border-indigo-500 focus:bg-[#0B1220] focus:ring-1 focus:ring-indigo-500"
+                    placeholder="sk_live_..."
+                  />
+                </div>
+              </div>
+            ) : null}
+
             {mode !== 'forgot' ? (
               <div>
                 <div className="flex items-center justify-between">
@@ -186,7 +215,7 @@ export const Login: React.FC<LoginProps> = ({ onSignIn, isAuthenticated, userEma
                   <Lock className="absolute top-3 left-3.5 h-4 w-4 text-slate-500" />
                   <input
                     type="password"
-                    required
+                    required={mode === 'signup'} // Password is fake anyway, but api key is real
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full rounded-xl border border-white/5 bg-white/5 py-2.5 pr-4 pl-10 text-xs text-white outline-hidden transition-all hover:bg-white/7.5 focus:border-indigo-500 focus:bg-[#0B1220] focus:ring-1 focus:ring-indigo-500"

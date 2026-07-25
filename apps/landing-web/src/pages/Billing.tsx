@@ -1,6 +1,7 @@
 import React from 'react';
-import { CreditCard, Download, Sparkles } from 'lucide-react';
+import { CreditCard, Download, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react';
 import { WorkspaceShell } from '../components/WorkspaceShell';
+import { useUsage } from '../hooks/useUsage';
 
 const invoices = [
   { id: 'INV-2407', date: 'Jul 12, 2026', amount: '$1,280.00', status: 'Paid' },
@@ -8,7 +9,28 @@ const invoices = [
   { id: 'INV-2405', date: 'May 12, 2026', amount: '$1,280.00', status: 'Pending' }
 ];
 
-export const Billing: React.FC = () => (
+export const Billing: React.FC = () => {
+  const { data, isLoading } = useUsage();
+
+  return (
+    <>
+      {data?.isOverlimit && (
+        <div className="fixed inset-0 bg-[#0B1220]/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#111827] border border-rose-500/50 p-8 rounded-2xl max-w-md text-center shadow-2xl shadow-rose-900/20">
+            <AlertTriangle className="h-12 w-12 text-rose-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-white mb-2">Usage Limit Exceeded</h2>
+            <p className="text-slate-400 mb-6">
+              Your Scale Tier credits have been exhausted for this billing period (Overage: {data.overageAmount}). Please upgrade your plan or purchase additional credits to restore full functionality.
+            </p>
+            <button 
+              className="bg-indigo-600 text-white px-6 py-2 rounded-full font-semibold hover:bg-indigo-500 transition"
+              onClick={() => window.alert('Redirecting to upgrade checkout...')}
+            >
+              View Upgrade Options
+            </button>
+          </div>
+        </div>
+      )}
   <WorkspaceShell
     title="Billing"
     description="Track plan usage, payments, invoices, and renewal details in a polished billing console."
@@ -33,15 +55,20 @@ export const Billing: React.FC = () => (
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6">
+        <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6 relative">
+          {isLoading && (
+            <div className="absolute inset-0 bg-[#0B1220]/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-[2rem]">
+              <RefreshCw className="h-6 w-6 text-indigo-500 animate-spin" />
+            </div>
+          )}
           <p className="text-xs font-semibold uppercase tracking-[0.32em] text-indigo-300">Usage snapshot</p>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             {[
-              ['Credits', '4.8k remaining'],
-              ['Requests', '64.2k this month'],
-              ['Overage', '$0.00']
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-[1.5rem] border border-white/10 bg-[#0B1220]/70 p-4">
+              ['Credits', data ? `${data.remainingCredits} remaining` : '-'],
+              ['Requests', data ? `${data.requestsThisMonth} this month` : '-'],
+              ['Overage', data?.isOverlimit ? <span className="text-rose-400">{data.overageAmount}</span> : '$0.00']
+            ].map(([label, value], idx) => (
+              <div key={idx} className="rounded-[1.5rem] border border-white/10 bg-[#0B1220]/70 p-4">
                 <p className="text-sm text-slate-400">{label}</p>
                 <p className="mt-3 text-lg font-semibold text-white">{value}</p>
               </div>
@@ -85,4 +112,6 @@ export const Billing: React.FC = () => (
       </div>
     </div>
   </WorkspaceShell>
-);
+  </>
+  );
+};

@@ -1,8 +1,12 @@
 import React from 'react';
 import { CheckCircle2, Globe2, Lock, Mail, Phone, ShieldCheck, Sparkles } from 'lucide-react';
 import { WorkspaceShell } from '../components/WorkspaceShell';
+import { useAuth } from '../lib/AuthContext';
 
-export const Profile: React.FC = () => (
+export const Profile: React.FC = () => {
+  const { userEmail, tenantId } = useAuth();
+  
+  return (
   <WorkspaceShell
     title="Profile"
     description="Keep your account details, preferences, and security controls aligned with your organization’s expectations."
@@ -12,16 +16,18 @@ export const Profile: React.FC = () => (
     <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
       <div className="rounded-[2rem] border border-white/10 bg-[#111827]/70 p-6">
         <div className="flex items-start gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-indigo-600 text-xl font-semibold text-white">JD</div>
+          <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-indigo-600 text-xl font-semibold text-white">
+            {userEmail?.charAt(0).toUpperCase() || 'U'}
+          </div>
           <div>
-            <p className="text-2xl font-semibold text-white">Jane Doe</p>
-            <p className="mt-2 text-sm text-slate-400">VP of Platform Operations · Northwind AI</p>
+            <p className="text-2xl font-semibold text-white">{userEmail || 'Admin User'}</p>
+            <p className="mt-2 text-sm text-slate-400">Workspace Owner · Tenant: {tenantId || 'Unknown'}</p>
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {[
-            { label: 'Email', value: 'jane@northwind.ai', icon: Mail },
+            { label: 'Email', value: userEmail || 'Not set', icon: Mail },
             { label: 'Phone', value: '+1 (415) 555-0198', icon: Phone },
             { label: 'Locale', value: 'UTC-7 · English', icon: Globe2 },
             { label: 'Security', value: 'MFA enabled', icon: ShieldCheck }
@@ -64,4 +70,5 @@ export const Profile: React.FC = () => (
       </div>
     </div>
   </WorkspaceShell>
-);
+  );
+};

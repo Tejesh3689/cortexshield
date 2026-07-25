@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider, useAuth } from './lib/AuthContext';
 import { PublicLayout } from './components/PublicLayout';
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
@@ -20,12 +22,10 @@ import { ApiKeys } from './pages/ApiKeys';
 import { Downloads } from './pages/Downloads';
 import { Notifications } from './pages/Notifications';
 import { Settings } from './pages/Settings';
-import { Connectors } from './pages/Connectors';
-import { Agents } from './pages/Agents';
-import { Deployments } from './pages/Deployments';
 import { Support } from './pages/Support';
 import { WorkspaceDocs } from './pages/WorkspaceDocs';
 import { ContentPage } from './pages/ContentPage';
+import { Graph } from './pages/Graph';
 
 interface ProtectedRouteProps {
   isAuthenticated: boolean;
@@ -40,47 +40,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ isAuthenticated, childr
   return <>{children}</>;
 };
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    return window.localStorage.getItem('agentos-auth') === 'true';
-  });
-
-  const [userEmail, setUserEmail] = useState<string>(() => {
-    if (typeof window === 'undefined') {
-      return '';
-    }
-    return window.localStorage.getItem('agentos-user-email') ?? 'jane.doe@agentos.ai';
-  });
-
-  const handleSignIn = (email: string, rememberMe: boolean) => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('agentos-auth', 'true');
-      window.localStorage.setItem('agentos-user-email', email);
-      if (!rememberMe) {
-        window.localStorage.setItem('agentos-remember', 'false');
-      }
-    }
-    setIsAuthenticated(true);
-    setUserEmail(email);
-  };
-
-  const handleSignOut = () => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('agentos-auth');
-      window.localStorage.removeItem('agentos-user-email');
-      window.localStorage.removeItem('agentos-remember');
-    }
-    setIsAuthenticated(false);
-    setUserEmail('');
-  };
+function AppRoutes() {
+  const { isAuthenticated, userEmail, signOut } = useAuth();
 
   return (
     <Router>
       <Routes>
-        <Route element={<PublicLayout isAuthenticated={isAuthenticated} onSignOut={handleSignOut} userEmail={userEmail} />}>
+        <Route element={<PublicLayout isAuthenticated={isAuthenticated} onSignOut={signOut} userEmail={userEmail} />}>
           <Route index element={<Landing />} />
           <Route path="features" element={<Features />} />
           <Route path="solutions" element={<Solutions />} />
@@ -95,17 +61,18 @@ function App() {
           <Route path="privacy" element={<ContentPage title="Privacy Policy" description="CortexShield AI is committed to protecting your data while you secure AI workflows and policy operations." bulletPoints={['Minimal data collection', 'Strong encryption in transit and at rest', 'Privacy controls for tenant data']} ctaLabel="Return home" ctaHref="/" secondaryLabel="View terms" secondaryHref="/terms" />} />
           <Route path="terms" element={<ContentPage title="Terms & Conditions" description="Review the usage terms for CortexShield AI, including access policies, support commitments, and workspace expectations." bulletPoints={['Acceptable use policy', 'Support and service levels', 'Data handling and privacy obligations']} ctaLabel="Return home" ctaHref="/" secondaryLabel="Contact support" secondaryHref="/contact" />} />
 
-          <Route path="signin" element={<Login onSignIn={handleSignIn} isAuthenticated={isAuthenticated} userEmail={userEmail} />} />
+          <Route path="signin" element={<Login />} />
           <Route path="login" element={<Navigate to="/signin" replace />} />
           <Route path="get-started" element={<Navigate to="/signin" replace />} />
 
           <Route path="overview" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Dashboard /></ProtectedRoute>} />
-          <Route path="connectors" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Connectors /></ProtectedRoute>} />
-          <Route path="agents" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Agents /></ProtectedRoute>} />
-          <Route path="deployments" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Deployments /></ProtectedRoute>} />
+          <Route path="connectors" element={<Navigate to="/overview" replace />} />
+          <Route path="agents" element={<Navigate to="/overview" replace />} />
+          <Route path="deployments" element={<Navigate to="/overview" replace />} />
           <Route path="profile" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Profile /></ProtectedRoute>} />
           <Route path="billing" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Billing /></ProtectedRoute>} />
           <Route path="api-keys" element={<ProtectedRoute isAuthenticated={isAuthenticated}><ApiKeys /></ProtectedRoute>} />
+          <Route path="graph" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Graph /></ProtectedRoute>} />
           <Route path="downloads" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Downloads /></ProtectedRoute>} />
           <Route path="notifications" element={<ProtectedRoute isAuthenticated={isAuthenticated}><Notifications /></ProtectedRoute>} />
           <Route path="workspace-docs" element={<ProtectedRoute isAuthenticated={isAuthenticated}><WorkspaceDocs /></ProtectedRoute>} />
@@ -116,6 +83,18 @@ function App() {
         </Route>
       </Routes>
     </Router>
+  );
+}
+
+const queryClient = new QueryClient();
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 

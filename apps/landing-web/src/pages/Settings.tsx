@@ -3,27 +3,27 @@ import {
   Key, 
   Users, 
   CreditCard, 
-  Bell, 
   Building2, 
   Plus, 
   Trash2, 
   Copy, 
-  Eye, 
-  EyeOff, 
   Check, 
   Info,
   X,
   ShieldCheck
 } from 'lucide-react';
-import { initialApiKeys, ApiKey } from '../mockData';
+import { useApiKeys } from '../hooks/useApiKeys';
+import { useAuth } from '../lib/AuthContext';
 
 export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'profile' | 'team' | 'keys' | 'billing'>('keys');
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>(initialApiKeys);
+  const { data, createKey, revokeKey, isLoading } = useApiKeys();
+  const { userEmail } = useAuth();
+  
   const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
-  const [revealedKeys, setRevealedKeys] = useState<string[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
+  const [createdKeyData, setCreatedKeyData] = useState<{ raw_key: string, name: string } | null>(null);
 
   // Team list
   const teamMembers = [
@@ -33,7 +33,6 @@ export const Settings: React.FC = () => {
     { name: 'Sam Rivera', email: 'sam.rivera@agentos.ai', role: 'Support Specialist', status: 'Active' }
   ];
 
-  // API key actions
   const handleCopyKey = (keyId: string, keyVal: string) => {
     navigator.clipboard.writeText(keyVal).then(() => {
       setCopiedKeyId(keyId);
@@ -41,41 +40,19 @@ export const Settings: React.FC = () => {
     });
   };
 
-  const handleToggleReveal = (keyId: string) => {
-    setRevealedKeys(prev => 
-      prev.includes(keyId) ? prev.filter(id => id !== keyId) : [...prev, keyId]
-    );
-  };
-
   const handleRevokeKey = (keyId: string) => {
-    setApiKeys(prev => prev.map(k => {
-      if (k.id === keyId) {
-        return { ...k, status: 'Revoked' as const };
-      }
-      return k;
-    }));
+    revokeKey.mutate(keyId);
   };
 
-  const handleGenerateKey = (e: React.FormEvent) => {
+  const handleGenerateKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newKeyName) return;
+    if (!newKeyName.trim()) return;
 
-    const randomHex = Array.from({ length: 24 }, () => 
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('');
-    
-    const newKey: ApiKey = {
-      id: `key-${Date.now()}`,
-      name: newKeyName,
-      key: `sk_live_agentos_${randomHex.substring(0, 19)}`,
-      created: new Date().toISOString().split('T')[0],
-      lastUsed: 'Never',
-      status: 'Active'
-    };
-
-    setApiKeys(prev => [...prev, newKey]);
-    setNewKeyName('');
-    setShowCreateModal(false);
+    const res = await createKey.mutateAsync(newKeyName);
+    if (res.success) {
+      setCreatedKeyData({ raw_key: res.api_key.raw_key, name: res.api_key.name });
+      setNewKeyName('');
+    }
   };
 
   return (
@@ -149,21 +126,21 @@ export const Settings: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {apiKeys.map((k) => {
-                  const isRevealed = revealedKeys.includes(k.id);
+                {isLoading && <tr><td colSpan={6} className="py-4 text-center">Loading keys...</td></tr>}
+                {!isLoading && data?.api_keys?.map((k) => {
                   const isCopied = copiedKeyId === k.id;
                   return (
                     <tr key={k.id} className="hover:bg-white/2.5">
-                      <td className="py-3.5 pl-4 font-semibold text-white">{k.name}</td>
+                      <td className="py-3.5 pl-4 font-semibold text-white">{k.id}</td>
                       <td className="py-3.5">
                         <div className="flex items-center gap-2 font-mono text-[10px] text-slate-400 bg-black/20 px-2.5 py-1 rounded-lg border border-white/5 max-w-[240px]">
                           <span>
-                            {isRevealed ? k.key : `${k.key.substring(0, 12)}••••••••••••`}
+                            {k.key_prefix}••••••••••••
                           </span>
                         </div>
                       </td>
-                      <td className="py-3.5 text-slate-400 font-mono">{k.created}</td>
-                      <td className="py-3.5 text-slate-400 font-mono">{k.lastUsed}</td>
+                      <td className="py-3.5 text-slate-400 font-mono">{new Date(k.created_at).toLocaleDateString()}</td>
+                      <td className="py-3.5 text-slate-400 font-mono">-</td>
                       <td className="py-3.5">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
                           k.status === 'Active' 
@@ -176,15 +153,7 @@ export const Settings: React.FC = () => {
                       <td className="py-3.5 pr-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => handleToggleReveal(k.id)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
-                            title="Reveal Key"
-                          >
-                            {isRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                          
-                          <button
-                            onClick={() => handleCopyKey(k.id, k.key)}
+                            onClick={() => handleCopyKey(k.id, k.key_prefix)}
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
                             title="Copy to Clipboard"
                           >
@@ -194,7 +163,8 @@ export const Settings: React.FC = () => {
                           {k.status === 'Active' && (
                             <button
                               onClick={() => handleRevokeKey(k.id)}
-                              className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer"
+                              disabled={revokeKey.isPending}
+                              className="rounded-lg p-1.5 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer disabled:opacity-50"
                               title="Revoke Key"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -249,12 +219,12 @@ export const Settings: React.FC = () => {
                     <td className="py-3.5 pl-4">
                       <div className="flex items-center gap-2">
                         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-                          {member.name.split(' ').map(w => w[0]).join('')}
+                          {idx === 0 ? userEmail?.charAt(0).toUpperCase() || 'U' : member.name.split(' ').map(w => w[0]).join('')}
                         </div>
-                        <span className="font-semibold text-white">{member.name}</span>
+                        <span className="font-semibold text-white">{idx === 0 ? (userEmail?.split('@')[0] || member.name) : member.name}</span>
                       </div>
                     </td>
-                    <td className="py-3.5 text-slate-400 font-mono">{member.email}</td>
+                    <td className="py-3.5 text-slate-400 font-mono">{idx === 0 ? (userEmail || member.email) : member.email}</td>
                     <td className="py-3.5 text-slate-300">{member.role}</td>
                     <td className="py-3.5 pr-4 text-right">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
@@ -346,46 +316,71 @@ export const Settings: React.FC = () => {
           <div className="fixed inset-0 bg-[#0B1220]/50 backdrop-blur-xs z-50" onClick={() => setShowCreateModal(false)} />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-[#111827] border border-white/10 rounded-2xl p-6 shadow-2xl z-50 animate-scale-in text-left">
             <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
-              <h3 className="font-heading text-sm font-bold text-white">Generate New API Key</h3>
+              <h3 className="font-heading text-sm font-bold text-white">{createdKeyData ? 'Save Your New Key' : 'Generate New API Key'}</h3>
               <button 
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { setShowCreateModal(false); setCreatedKeyData(null); }}
                 className="rounded-lg bg-white/5 p-1 text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleGenerateKey} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">
-                  Key Description Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Production Webhook Router"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  className="w-full rounded-xl border border-white/5 bg-white/5 px-3.5 py-2 text-xs text-white outline-hidden focus:border-indigo-500 focus:bg-[#0B1220] focus:ring-1 focus:ring-indigo-500"
-                />
+            {createdKeyData ? (
+              <div className="space-y-4">
+                <p className="text-[10px] text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+                  Please copy this key now. For security reasons, you will not be able to see it again.
+                </p>
+                <div className="mt-4 p-3 rounded-xl bg-[#0B1220] border border-white/10 break-all text-xs font-mono text-emerald-300">
+                  {createdKeyData.raw_key}
+                </div>
+                <button 
+                  onClick={() => handleCopyKey('raw', createdKeyData.raw_key)}
+                  className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10 cursor-pointer flex justify-center items-center gap-2"
+                >
+                  {copiedKeyId === 'raw' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                  {copiedKeyId === 'raw' ? 'Copied to Clipboard' : 'Copy Key'}
+                </button>
+                <button 
+                  onClick={() => { setShowCreateModal(false); setCreatedKeyData(null); }}
+                  className="w-full mt-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-indigo-500 cursor-pointer"
+                >
+                  I've saved it securely
+                </button>
               </div>
+            ) : (
+              <form onSubmit={handleGenerateKey} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 mb-2">
+                    Key Description Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Production Webhook Router"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    className="w-full rounded-xl border border-white/5 bg-white/5 px-3.5 py-2 text-xs text-white outline-hidden focus:border-indigo-500 focus:bg-[#0B1220] focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
 
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-white/10 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-indigo-500 cursor-pointer"
-                >
-                  Generate Key
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-white/10 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createKey.isPending}
+                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white shadow-lg hover:bg-indigo-500 cursor-pointer disabled:opacity-50"
+                  >
+                    {createKey.isPending ? 'Generating...' : 'Generate Key'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </>
       )}

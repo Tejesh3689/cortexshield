@@ -1,7 +1,37 @@
 import React from 'react';
 import { Activity, BrainCircuit, Cpu, Sparkles, Zap, TrendingUp } from 'lucide-react';
 import { WorkspaceShell } from '../components/WorkspaceShell';
-import { initialAgents } from '../mockData';
+
+const initialAgents = [
+  {
+    id: 'support-ai',
+    name: 'Customer Support AI',
+    department: 'Customer Success',
+    health: 99.2,
+    requests: 48120,
+    latency: 184,
+    model: 'Claude 3.5 Sonnet',
+    status: 'Active',
+    lastActive: 'Just now',
+    description: 'Autonomous agent handling tier-1 user inquiries, refunds, and ticket classification. Integrated with Zendesk.',
+    successRate: 98.4,
+    tokensUsed: 4239012,
+  },
+  {
+    id: 'hr-ai',
+    name: 'HR Operations AI',
+    department: 'Human Resources',
+    health: 98.5,
+    requests: 3120,
+    latency: 245,
+    model: 'GPT-4o',
+    status: 'Active',
+    lastActive: '4 mins ago',
+    description: 'Assists employees with policy queries, onboarding workflows, and leave balancing requests. Integrated with Workday.',
+    successRate: 97.2,
+    tokensUsed: 890450,
+  }
+];
 
 export const Agents: React.FC = () => (
   <WorkspaceShell
