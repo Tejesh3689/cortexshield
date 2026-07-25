@@ -7,7 +7,7 @@ from cortex_schemas.models import ToolCallRequest, ToolCallResponse
 # Mock of an actual tool execution for the proxy
 async def execute_tool(req: ToolCallRequest) -> ToolCallResponse:
     # In a real proxy, this forwards to the target. Here we mock it.
-    return ToolCallResponse(id=req.id, result={"status": "executed", "data": "dummy data"})
+    return ToolCallResponse(id=req.id, result={"content": [{"type": "text", "text": "Tool executed successfully."}], "isError": False})
 
 async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> dict:
     req_id = request_data.get("id")
@@ -102,7 +102,7 @@ async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> 
             decision = await decide(req, tenant_id, agent_id, session=session)
 
         if decision.decision.value == "DENY":
-            return ToolCallResponse(id=req.id, error={"code": -32000, "message": f"Denied: {decision.reason}"}).model_dump(exclude_none=True)
+            return ToolCallResponse(id=req.id, result={"content": [{"type": "text", "text": f"Denied: {decision.reason}"}], "isError": True}).model_dump(exclude_none=True)
             
         if tool_name == "add_memory":
             response = await handle_add_memory(req, tenant_id, agent_id)
@@ -116,4 +116,4 @@ async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> 
         safe_response = await sanitize_tool_response(raw_response, tenant_id, agent_id, tool_name)
         return safe_response.model_dump(exclude_none=True)
         
-    return ToolCallResponse(id=req_id, error={"code": -32601, "message": f"Method '{method}' not found"}).model_dump(exclude_none=True)
+    return ToolCallResponse(id=req_id, result={"content": [{"type": "text", "text": f"Method '{method}' not found"}], "isError": True}).model_dump(exclude_none=True)

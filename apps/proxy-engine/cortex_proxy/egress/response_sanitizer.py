@@ -41,8 +41,7 @@ async def sanitize_tool_response(response: ToolCallResponse, tenant_id: str, age
             # Strip payload entirely and return explicit error
             return ToolCallResponse(
                 id=response.id,
-                result=None,
-                error={"error": "response blocked: policy violation", "code": "EGRESS_BLOCKED"}
+                result={"content": [{"type": "text", "text": "Egress blocked: policy violation"}], "isError": True}
             )
         else:
             # Recursively redact the original dictionary/payload
