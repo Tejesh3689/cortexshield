@@ -28,6 +28,7 @@ async def handle_add_memory(
     it as a background task. Returns immediately without blocking the response path.
     """
     raw_text = request.params.get("arguments", {}).get("text", "")
+    logger.info(f"[DIAGNOSTIC] add_memory called by tenant={tenant_id} agent={agent_id} text='{raw_text}'")
 
     job = MemoryWriteJob(
         tenant_id=tenant_id,
@@ -41,19 +42,18 @@ async def handle_add_memory(
     # cortex_healing is installed as a local path dependency (see proxy-engine/pyproject.toml).
     try:
         from cortex_healing.processor import process_memory_write_job
+        logger.info(f"[DIAGNOSTIC] Successfully imported process_memory_write_job")
         
         async def run_and_log_memory_job(j: MemoryWriteJob):
+            logger.info(f"[DIAGNOSTIC] Starting background memory write job {j.job_id}")
             try:
                 await process_memory_write_job(j)
-                logger.info(f"Successfully processed memory write job for tenant {j.tenant_id}")
+                logger.info(f"[DIAGNOSTIC] Successfully completed background memory write job {j.job_id}")
             except Exception as e:
-                logger.error(f"BACKGROUND TASK FAILED: process_memory_write_job raised an exception: {e}", exc_info=True)
+                logger.error(f"[DIAGNOSTIC] BACKGROUND TASK FAILED for {j.job_id}: {e}", exc_info=True)
                 
         asyncio.create_task(run_and_log_memory_job(job))
-    except ImportError:
-        logger.error(
-            "cortex_healing not importable — memory write job dropped. "
-            "Ensure cortex_healing is installed as a path dependency in proxy-engine/pyproject.toml."
-        )
+    except ImportError as ie:
+        logger.error(f"[DIAGNOSTIC] ImportError loading cortex_healing: {ie}")
 
     return ToolCallResponse(id=request.id, result={"content": [{"type": "text", "text": "Memory ingestion queued successfully."}], "isError": False})

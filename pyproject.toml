@@ -31,4 +31,4 @@ cortex_schemas = { workspace = true }
 cortex_neo4j_client = { workspace = true }
 cortex_security_rules = { workspace = true }
 cortex_telemetry = { workspace = true }
-healing-worker = { workspace = true }
+cortex_healing = { workspace = true }
