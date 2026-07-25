@@ -426,6 +426,9 @@ export default function MemoryGraphView() {
               ctx.arc(node.x, node.y, (node.val || 14) + 6, 0, 2 * Math.PI, false);
               ctx.fill();
             }}
+            warmupTicks={150}
+            cooldownTicks={100}
+            cooldownTime={2000}
             onNodeClick={handleNodeClick}
             onLinkClick={handleLinkClick}
             // 1. Color Edges based on relationship status
