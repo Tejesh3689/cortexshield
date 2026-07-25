@@ -22,7 +22,7 @@ export async function GET() {
     // Fetch all relationships with relationship properties
     const relResult = await session.run(
       `MATCH (a)-[r]->(b) 
-       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(r) as rProps, properties(a) as aProps, properties(b) as bProps`
+       RETURN id(a) as sourceId, id(b) as targetId, type(r) as relType, properties(a) as aProps, properties(b) as bProps, properties(r) as rProps`
     );
 
     await session.close();
@@ -54,12 +54,6 @@ export async function GET() {
         status,
         type: props.type || labels[0] || "Entity",
         val: 14,
-        memoryHash: props.memoryHash || props.hash || undefined,
-        vectorDimension: props.vectorDimension || undefined,
-        similarityScore: props.similarityScore !== undefined ? parseFloat(props.similarityScore) : undefined,
-        decayFactor: props.decayFactor !== undefined ? parseFloat(props.decayFactor) : undefined,
-        retentionPolicy: props.retentionPolicy || "Active Context",
-        accessCount: props.accessCount !== undefined ? parseInt(props.accessCount, 10) : undefined,
         tenant: props.tenant_id || props.tenant || "tenant_pro_1",
         timestamp: props.timestamp || new Date().toISOString().replace("T", " ").slice(0, 19),
         content: props.content || props.text || `Neo4j Entity Node: ${label} (Tenant: ${props.tenant_id || "tenant_pro_1"})`,

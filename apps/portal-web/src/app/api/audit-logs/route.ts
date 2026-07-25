@@ -102,62 +102,46 @@ export async function GET(request: Request) {
     client.release();
     await pool.end();
 
-    const decisionMap: Record<string, string> = {
-      PROMPT_INJECTION: "BLOCK",
-      PII_LEAK_MASKED: "SANITIZE",
-      POISONED_MEMORY_CHUNK: "QUARANTINE",
-      PROVENANCE_PASSED: "ALLOW",
-      MALFORMED_PAYLOAD: "BLOCK",
-    };
-
-    const logs = (result.rows || []).map((row: any, index: number) => {
-      const rawIdStr = String(row.id || `log_${index}`);
-      const typeKey = String(row.event_type || "PROVENANCE_PASSED").toUpperCase();
-      const decision = decisionMap[typeKey] || "ALLOW";
-
-      let formattedTime = "Just now";
-      try {
-        if (row.created_at) {
-          formattedTime = new Date(row.created_at).toISOString().replace("T", " ").slice(0, 19);
-        }
-      } catch (e) {
-        formattedTime = String(row.created_at || "Just now");
-      }
-
-      return {
-        id: `LOG_${rawIdStr.slice(0, 8).toUpperCase()}`,
-        rawId: rawIdStr,
-        timestamp: formattedTime,
-        tenantId: String(row.tenant_id || "tenant_pro_1"),
-        toolName: String(row.event_ref || "PR-INJ-009"),
-        eventType: String(row.event_type || "PROMPT_INJECTION"),
-        decision,
-        hash: String(row.this_hash || "0x0000000000000000"),
-        prevHash: String(row.prev_hash || "GENESIS_HEADER_00000000000000000000000000000000"),
-        verified: true,
-        ipAddress: `192.168.1.${100 + (index * 7) % 50}`,
-        latencyMs: parseFloat((1.8 + (index * 1.3) % 4.5).toFixed(1)),
-        payloadSnippet: JSON.stringify(
-          {
+    if (result.rows && result.rows.length > 0) {
+      const toolNames = [
+        "mcp_vector_query",
+        "execute_shell_command",
+        "llm_completion_stream",
+        "graph_node_upsert",
+        "stripe_meter_billing",
+        "cortex_proxy_filter"
+      ];
+      const logs = result.rows.map((row: any, index: number) => {
+        const tool = toolNames[index % toolNames.length];
+        
+        return {
+          id: `LOG_${row.id.slice(0, 8).toUpperCase()}`,
+          rawId: row.id,
+          timestamp: new Date(row.created_at).toISOString().replace("T", " ").slice(0, 19),
+          tenantId: row.tenant_id || "tenant_pro_1",
+          toolName: row.event_ref || tool,
+          eventType: row.event_type || "firewall_decision",
+          hash: row.this_hash || `0x${Math.random().toString(16).slice(2, 14)}`,
+          prevHash: row.prev_hash ? row.prev_hash : "GENESIS_HEADER_00000000000000000000000000000000",
+          verified: true,
+          payloadSnippet: JSON.stringify({
             event_type: row.event_type,
             event_ref: row.event_ref,
             tenant: row.tenant_id,
             this_hash: row.this_hash,
             prev_hash: row.prev_hash,
-          },
-          null,
-          2
-        ),
-      };
-    });
+          }, null, 2),
+        };
+      });
 
-    return NextResponse.json({
-      success: true,
-      source: "Neon Postgres (Live Ledger)",
-      count: logs.length,
-      logs,
-      timestamp: new Date().toISOString(),
-    });
+      return NextResponse.json({
+        success: true,
+        source: "Neon Postgres (Live Ledger)",
+        count: logs.length,
+        logs,
+        timestamp: new Date().toISOString(),
+      });
+    }
   } catch (err: any) {
     console.error("Audit log GET fallback:", err?.message || err);
 
@@ -170,13 +154,10 @@ export async function GET(request: Request) {
         tenantId: "tenant_pro_1",
         toolName: "PR-INJ-009",
         eventType: "PROMPT_INJECTION",
-        decision: "BLOCK",
         hash: "e05ad8b75dfa71ba0dd230b4087f395b0de4641c201b5d2300c3c445c002fead",
         prevHash: "b3d20ab533c97aa04012578c38339f143699573afa59c8f60d00f3314c5174f5",
         verified: true,
-        ipAddress: "192.168.1.104",
-        latencyMs: 3.2,
-        payloadSnippet: '{\n  "event_type": "PROMPT_INJECTION",\n  "tenant": "tenant_pro_1",\n  "decision": "BLOCK"\n}',
+        payloadSnippet: '{\n  "event_type": "PROMPT_INJECTION",\n  "tenant": "tenant_pro_1"\n}',
       },
       {
         id: "LOG_874AEB1F",
@@ -185,13 +166,10 @@ export async function GET(request: Request) {
         tenantId: "tenant_pro_1",
         toolName: "PII-MASK-SSN",
         eventType: "PII_LEAK_MASKED",
-        decision: "SANITIZE",
         hash: "b3d20ab533c97aa04012578c38339f143699573afa59c8f60d00f3314c5174f5",
         prevHash: "179fbb35ea38dfbfee9c48450de226fcc1c3f2728b125f67a1c2e6aec845de3c",
         verified: true,
-        ipAddress: "192.168.1.112",
-        latencyMs: 1.9,
-        payloadSnippet: '{\n  "event_type": "PII_LEAK_MASKED",\n  "tenant": "tenant_pro_1",\n  "decision": "SANITIZE"\n}',
+        payloadSnippet: '{\n  "event_type": "PII_LEAK_MASKED",\n  "tenant": "tenant_pro_1"\n}',
       },
       {
         id: "LOG_A6BD3312",
@@ -200,13 +178,10 @@ export async function GET(request: Request) {
         tenantId: "tenant_pro_1",
         toolName: "MEM-INTEG-04",
         eventType: "POISONED_MEMORY_CHUNK",
-        decision: "QUARANTINE",
         hash: "179fbb35ea38dfbfee9c48450de226fcc1c3f2728b125f67a1c2e6aec845de3c",
         prevHash: "9b1ffe42c4d252229f72af477c7cdf993d9be7762ea5ec838a740a82ddac02c3",
         verified: true,
-        ipAddress: "192.168.1.119",
-        latencyMs: 4.1,
-        payloadSnippet: '{\n  "event_type": "POISONED_MEMORY_CHUNK",\n  "tenant": "tenant_pro_1",\n  "decision": "QUARANTINE"\n}',
+        payloadSnippet: '{\n  "event_type": "POISONED_MEMORY_CHUNK",\n  "tenant": "tenant_pro_1"\n}',
       },
       {
         id: "LOG_30D55BB9",
@@ -215,13 +190,10 @@ export async function GET(request: Request) {
         tenantId: "tenant_pro_1",
         toolName: "CYPHER-OK-200",
         eventType: "PROVENANCE_PASSED",
-        decision: "ALLOW",
         hash: "9b1ffe42c4d252229f72af477c7cdf993d9be7762ea5ec838a740a82ddac02c3",
         prevHash: "4d094765efbf22305f0750eeb20da6f96e3895fb76bb21bc1e247b6aaa0aed0d",
         verified: true,
-        ipAddress: "192.168.1.126",
-        latencyMs: 5.4,
-        payloadSnippet: '{\n  "event_type": "PROVENANCE_PASSED",\n  "tenant": "tenant_pro_1",\n  "decision": "ALLOW"\n}',
+        payloadSnippet: '{\n  "event_type": "PROVENANCE_PASSED",\n  "tenant": "tenant_pro_1"\n}',
       },
       {
         id: "LOG_CD625CC1",
@@ -230,13 +202,10 @@ export async function GET(request: Request) {
         tenantId: "tenant_pro_1",
         toolName: "PAYLOAD-VAL-01",
         eventType: "MALFORMED_PAYLOAD",
-        decision: "BLOCK",
         hash: "4d094765efbf22305f0750eeb20da6f96e3895fb76bb21bc1e247b6aaa0aed0d",
         prevHash: "GENESIS_HEADER_00000000000000000000000000000000",
         verified: true,
-        ipAddress: "192.168.1.133",
-        latencyMs: 2.8,
-        payloadSnippet: '{\n  "event_type": "MALFORMED_PAYLOAD",\n  "tenant": "tenant_pro_1",\n  "decision": "BLOCK"\n}',
+        payloadSnippet: '{\n  "event_type": "MALFORMED_PAYLOAD",\n  "tenant": "tenant_pro_1"\n}',
       },
     ];
 

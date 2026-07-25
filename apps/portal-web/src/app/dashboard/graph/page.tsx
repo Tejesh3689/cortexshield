@@ -28,12 +28,8 @@ export interface MemoryNode {
   type: "SHORT_TERM" | "LONG_TERM" | "VECTOR_EMBEDDING" | "POISONED_FRAGMENT" | string;
   color?: string;
   val: number;
-  memoryHash: string;
-  vectorDimension: string;
-  similarityScore: number;
-  decayFactor: number;
-  retentionPolicy: string;
-  accessCount: number;
+  retentionPolicy?: string;
+  accessCount?: number;
   tenant: string;
   timestamp: string;
   content: string;
@@ -61,12 +57,6 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     type: "Entity",
     color: "#10b981",
     val: 14,
-    memoryHash: "0x8F4B-99A1-USER",
-    vectorDimension: "1536 (text-embedding-3-large)",
-    similarityScore: 0.98,
-    decayFactor: 0.99,
-    retentionPolicy: "Active Context",
-    accessCount: 4210,
     tenant: "tenant_pro_1",
     timestamp: "2026-07-25 07:00:00",
     content: "Entity: user (Active entity node in system vector memory graph)",
@@ -78,12 +68,6 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     type: "Entity",
     color: "#3b82f6",
     val: 14,
-    memoryHash: "0x3A11-54B9-BLUE",
-    vectorDimension: "1536 (text-embedding-3-large)",
-    similarityScore: 0.94,
-    decayFactor: 0.95,
-    retentionPolicy: "Active Context",
-    accessCount: 312,
     tenant: "tenant_pro_1",
     timestamp: "2026-07-25 07:00:00",
     content: "Entity: blue (Active entity node target)",
@@ -95,12 +79,6 @@ const SEED_MEMORY_NODES: MemoryNode[] = [
     type: "Entity",
     color: "#10b981",
     val: 14,
-    memoryHash: "0x4B22-88C1-ST02",
-    vectorDimension: "1536 (text-embedding-3-large)",
-    similarityScore: 0.94,
-    decayFactor: 0.92,
-    retentionPolicy: "Session Scope",
-    accessCount: 540,
     tenant: "tenant_pro_1",
     timestamp: "2026-07-25 07:00:00",
     content: "System instruction guardrail root entity.",
@@ -181,7 +159,6 @@ export default function MemoryGraphView() {
         return (
           node.label.toLowerCase().includes(q) ||
           node.id.toLowerCase().includes(q) ||
-          (node.memoryHash && node.memoryHash.toLowerCase().includes(q)) ||
           (node.content && node.content.toLowerCase().includes(q))
         );
       }
@@ -589,20 +566,8 @@ export default function MemoryGraphView() {
 
               <div className="space-y-2 border-b border-[#1b273d] pb-3 text-[11px]">
                 <div className="flex justify-between py-1 border-b border-[#172238]">
-                  <span className="text-slate-400">Memory Hash</span>
-                  <span className="text-[#10b981] font-bold">{selectedNode.memoryHash}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-[#172238]">
                   <span className="text-slate-400">Node Status</span>
                   <span className="font-bold text-emerald-400">{selectedNode.status}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-[#172238]">
-                  <span className="text-slate-400">Vector Embeddings</span>
-                  <span className="text-slate-200 text-[10px]">{selectedNode.vectorDimension}</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-[#172238]">
-                  <span className="text-slate-400">Cosine Similarity</span>
-                  <span className="text-blue-400 font-bold">{selectedNode.similarityScore}</span>
                 </div>
               </div>
 
