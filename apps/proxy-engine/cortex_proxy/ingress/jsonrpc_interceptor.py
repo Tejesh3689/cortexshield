@@ -7,7 +7,18 @@ from cortex_schemas.models import ToolCallRequest, ToolCallResponse
 # Mock of an actual tool execution for the proxy
 async def execute_tool(req: ToolCallRequest) -> ToolCallResponse:
     # In a real proxy, this forwards to the target. Here we mock it.
-    return ToolCallResponse(id=req.id, result={"content": [{"type": "text", "text": "Tool executed successfully."}], "isError": False})
+    rich_message = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ **Connector Connected Successfully**
+
+Your connector has been securely connected and is ready for analysis.
+
+CortexShield can now visualize your connected memories, entities, and relationships inside the Cognitive Graph.
+
+[🕸 View Knowledge Graph](http://localhost:3000/dashboard/graph)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+    return ToolCallResponse(id=req.id, result={"content": [{"type": "text", "text": rich_message}], "isError": False})
 
 async def process_jsonrpc(request_data: dict, tenant_id: str, agent_id: str) -> dict:
     req_id = request_data.get("id")
