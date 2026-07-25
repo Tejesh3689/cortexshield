@@ -18,6 +18,8 @@ import {
 // Dynamically import react-force-graph-2d to prevent SSR canvas issues
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
+// @ts-ignore
+import { forceRadial, forceCollide, forceManyBody } from "d3-force-3d";
 import { SkeletonLoader, ErrorBanner, EmptyStatePrompt, OfflineBanner } from "@/components/StatusBanners";
 
 export interface MemoryNode {
@@ -249,18 +251,86 @@ export default function MemoryGraphView() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const reconcileGraphNodes = useCallback((incomingNodes: MemoryNode[]): MemoryNode[] => {
+    // 1. Identify main central root node (prefer 'user' or 'cortex_core' or first node)
+    const mainNodeKey = incomingNodes.find((n) => n.id === "user" || n.id === "cortex_core" || n.label.toLowerCase().includes("user"))?.id || incomingNodes[0]?.id || "user";
+
+    // 2. Separate peripheral nodes into concentric orbital tiers around main node
+    const peripheralNodes = incomingNodes.filter((n) => (n.id || n.label) !== mainNodeKey);
+
     return incomingNodes.map((incoming, idx) => {
       const key = incoming.id || incoming.label;
+      const isMainNode = key === mainNodeKey;
       const existing = nodesCacheRef.current.get(key);
 
+      // Central Main Node sits dead center (0, 0)
+      if (isMainNode) {
+        if (existing) {
+          existing.label = incoming.label;
+          existing.status = incoming.status;
+          existing.type = incoming.type;
+          existing.content = incoming.content;
+          existing.isMainNode = true;
+          existing.isHub = true;
+          existing.targetRadius = 0;
+          existing.x = 0;
+          existing.y = 0;
+          existing.fx = 0;
+          existing.fy = 0;
+          return existing;
+        }
+        const mainNodeObj = {
+          ...incoming,
+          isMainNode: true,
+          isHub: true,
+          targetRadius: 0,
+          x: 0,
+          y: 0,
+          fx: 0,
+          fy: 0,
+        };
+        nodesCacheRef.current.set(key, mainNodeObj);
+        return mainNodeObj;
+      }
+
+      // Calculate radial index and orbital shell radius
+      const pIdx = peripheralNodes.findIndex((n) => (n.id || n.label) === key);
+      const totalPeripheral = Math.max(peripheralNodes.length, 1);
+
+      let targetRadius = 140;
+      let phaseOffset = 0;
+      const isHub = key.includes("blue") || key.includes("system_prompt") || key.includes("admin");
+
+      if (isHub) {
+        targetRadius = 100;
+        phaseOffset = 0;
+      } else if (key.includes("dept") || key.includes("role") || key.includes("alice") || key.includes("bob")) {
+        targetRadius = 180;
+        phaseOffset = Math.PI / 6;
+      } else if (incoming.status === "FLAGGED_POISON") {
+        targetRadius = 240;
+        phaseOffset = Math.PI / 4;
+      } else if (incoming.status === "EXTERNAL_FETCH") {
+        targetRadius = 300;
+        phaseOffset = Math.PI / 3;
+      } else {
+        targetRadius = 150 + (pIdx % 4) * 50;
+        phaseOffset = (pIdx % 3) * (Math.PI / 5);
+      }
+
+      const angle = ((pIdx >= 0 ? pIdx : idx) / totalPeripheral) * 2 * Math.PI + phaseOffset;
+      const initX = Math.cos(angle) * targetRadius;
+      const initY = Math.sin(angle) * targetRadius;
+
       if (existing) {
-        // Update data properties in-place on existing node object instance
         existing.label = incoming.label;
         existing.status = incoming.status;
         existing.type = incoming.type;
         existing.content = incoming.content;
         existing.timestamp = incoming.timestamp;
         existing.tenant = incoming.tenant;
+        existing.targetRadius = targetRadius;
+        existing.isHub = isHub;
+        existing.isMainNode = false;
 
         if (existing.x !== undefined && existing.fx === undefined) {
           existing.fx = existing.x;
@@ -269,22 +339,11 @@ export default function MemoryGraphView() {
         return existing;
       }
 
-      // New node: calculate initial preset position
-      const preset = PRESET_CLUSTER_COORDINATES[key];
-      let initX = 0;
-      let initY = 0;
-      if (preset) {
-        initX = preset.x;
-        initY = preset.y;
-      } else {
-        const angle = (idx / Math.max(incomingNodes.length, 1)) * 2 * Math.PI;
-        const radius = 180;
-        initX = Math.cos(angle) * radius;
-        initY = Math.sin(angle) * radius;
-      }
-
       const newNode = {
         ...incoming,
+        targetRadius,
+        isHub,
+        isMainNode: false,
         x: initX,
         y: initY,
         fx: initX,
@@ -420,6 +479,13 @@ export default function MemoryGraphView() {
 
     const timer = setTimeout(() => {
       if (fgRef.current) {
+        try {
+          fgRef.current.d3Force("radial", forceRadial((d: any) => d.targetRadius || 200, 0, 0).strength(0.45));
+          fgRef.current.d3Force("collide", forceCollide((d: any) => (d.val || 6) + 4).strength(0.8));
+          fgRef.current.d3Force("charge", forceManyBody().strength(-40));
+        } catch (e) {
+          // d3 force init
+        }
         fgRef.current.zoomToFit(600, 50);
       }
     }, 400);
@@ -617,28 +683,30 @@ export default function MemoryGraphView() {
     }
   };
 
-  // Custom Node Canvas Renderer
+  // Custom Node Canvas Renderer (Obsidian Graph Visual Style)
   const drawNodeCanvas = (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const label = node.label || node.id;
-    const fontSize = 12 / globalScale;
-    ctx.font = `${fontSize}px Sans-Serif`;
+    const isMain = node.isMainNode;
+    const isHub = node.isHub || node.val >= 12;
+    const fontSize = (isMain ? 13 : isHub ? 10.5 : 9) / globalScale;
+    ctx.font = `${isMain || isHub ? "bold" : "normal"} ${fontSize}px Inter, sans-serif`;
 
     const isPoisoned = node.status === "FLAGGED_POISON";
     const isSuperseded = node.status === "SUPERSEDED";
     const isExternalFetch = node.status === "EXTERNAL_FETCH" || node.origin === "EXTERNAL_FETCH" || node.type === "EXTERNAL_FETCH";
-    const radius = node.val || 14;
+    const radius = isMain ? 12 : isHub ? 8.5 : 5.5;
 
-    // Outer Glow Ring
+    // Outer Glow Ring (Obsidian Ambient Aura)
     ctx.beginPath();
-    ctx.arc(node.x, node.y, radius + 4, 0, 2 * Math.PI, false);
+    ctx.arc(node.x, node.y, radius + (isMain ? 7 : isHub ? 5 : 3), 0, 2 * Math.PI, false);
     if (isPoisoned) {
-      ctx.fillStyle = "rgba(239, 68, 68, 0.25)";
+      ctx.fillStyle = "rgba(239, 68, 68, 0.35)";
     } else if (isSuperseded) {
       ctx.fillStyle = "rgba(100, 116, 139, 0.2)";
     } else if (isExternalFetch) {
-      ctx.fillStyle = "rgba(168, 85, 247, 0.25)"; // Purple glow for External Fetch
+      ctx.fillStyle = "rgba(168, 85, 247, 0.35)";
     } else {
-      ctx.fillStyle = "rgba(16, 185, 129, 0.2)";
+      ctx.fillStyle = isMain ? "rgba(16, 185, 129, 0.4)" : "rgba(16, 185, 129, 0.25)";
     }
     ctx.fill();
 
@@ -646,16 +714,16 @@ export default function MemoryGraphView() {
     ctx.beginPath();
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
     if (isPoisoned) {
-      ctx.fillStyle = "#ef4444"; // Red for Poison
+      ctx.fillStyle = "#ef4444";
     } else if (isSuperseded) {
-      ctx.fillStyle = "#64748b"; // Gray for Superseded
+      ctx.fillStyle = "#64748b";
     } else if (isExternalFetch) {
-      ctx.fillStyle = "#a855f7"; // Purple sphere for External Fetch (Low Trust)
+      ctx.fillStyle = "#a855f7";
     } else {
-      ctx.fillStyle = node.color || "#10b981"; // Green/Blue for Active
+      ctx.fillStyle = node.color || "#10b981";
     }
     ctx.fill();
-    ctx.lineWidth = 2 / globalScale;
+    ctx.lineWidth = (isMain ? 2.5 : 1.5) / globalScale;
     ctx.strokeStyle = "#ffffff";
     ctx.stroke();
 
@@ -883,7 +951,7 @@ export default function MemoryGraphView() {
             nodePointerAreaPaint={(node: any, color, ctx) => {
               ctx.fillStyle = color;
               ctx.beginPath();
-              ctx.arc(node.x, node.y, (node.val || 14) + 6, 0, 2 * Math.PI, false);
+              ctx.arc(node.x, node.y, (node.isHub ? 9 : 5.5) + 5, 0, 2 * Math.PI, false);
               ctx.fill();
             }}
             warmupTicks={200}
