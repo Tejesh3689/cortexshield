@@ -147,6 +147,34 @@ async def generate_compliance_report(
         """
         res_prov = await session.run(query_prov, tenant=tenant_id, start=start_dt.isoformat(), end=end_dt.isoformat())
         provenance_samples = [record.data() async for record in res_prov]
+        # d. Temporal (Sleeper) Attacks
+        query_sleeper = """
+        MATCH (alert:TemporalAlert {tenant_id: $tenant})
+        WHERE alert.detected_at >= datetime($start) AND alert.detected_at <= datetime($end)
+        RETURN alert.id as alert_id, alert.alert_type as alert_type, alert.detected_at as detected_at,
+               alert.fact_age_days as fact_age_days, alert.status as status
+        """
+        res_sleeper = await session.run(query_sleeper, tenant=tenant_id, start=start_dt.isoformat(), end=end_dt.isoformat())
+        sleeper_records = [record.data() async for record in res_sleeper]
+        
+        def clean_neo4j_records(records):
+            import neo4j.time
+            for r in records:
+                for k, v in r.items():
+                    if isinstance(v, neo4j.time.DateTime):
+                        r[k] = v.to_native().isoformat() + "Z"
+                    elif isinstance(v, list):
+                        for item in v:
+                            if isinstance(item, dict):
+                                for ik, iv in item.items():
+                                    if isinstance(iv, neo4j.time.DateTime):
+                                        item[ik] = iv.to_native().isoformat() + "Z"
+            return records
+
+        poison_records = clean_neo4j_records(poison_records)
+        remed_records = clean_neo4j_records(remed_records)
+        provenance_samples = clean_neo4j_records(provenance_samples)
+        sleeper_records = clean_neo4j_records(sleeper_records)
         
     await neo4j_driver.close()
 
@@ -166,9 +194,10 @@ async def generate_compliance_report(
             "total_ai_decisions": total_ai_decisions,
             "decisions_allowed": decisions_allowed,
             "decisions_denied": decisions_denied,
-            "injection_attempts_detected": len(poison_records),
+            "injection_attempts_detected": len(poison_records) + len(sleeper_records),
             "injection_attempts_quarantined": len(poison_records),
             "manual_remediations": len(remed_records),
+            "temporal_attacks_detected": len(sleeper_records),
             "audit_chain_intact": chain_intact,
             "audit_records_count": len(records)
         },
@@ -185,10 +214,11 @@ async def generate_compliance_report(
             "provenance_samples": provenance_samples
         },
         "article_15_evidence": {
-            "adversarial_attacks_detected": len(poison_records),
-            "attack_types": ["memory_injection", "indirect_prompt_injection"],
-            "robustness_mechanism": "trust-scored memory graph with poison classification",
-            "tamper_evidence": f"SHA-256 hash chain, chain_intact: {str(chain_intact).lower()}"
+            "adversarial_attacks_detected": len(poison_records) + len(sleeper_records),
+            "attack_types": ["memory_injection", "indirect_prompt_injection", "temporal_sleeper_attack"],
+            "robustness_mechanism": "trust-scored memory graph with poison classification and temporal anomaly detection",
+            "tamper_evidence": f"SHA-256 hash chain, chain_intact: {str(chain_intact).lower()}",
+            "temporal_alerts": sleeper_records
         },
         "audit_chain_verification": {
             "verified_at": generated_at,
@@ -199,8 +229,16 @@ async def generate_compliance_report(
         }
     }
     
+    class CustomEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if hasattr(obj, "isoformat"):
+                return obj.isoformat()
+            if hasattr(obj, "to_native"):
+                return obj.to_native().isoformat()
+            return super().default(obj)
+            
     # Store Hash in DB
-    report_hash = hashlib.sha256(json.dumps(json_report, sort_keys=True).encode()).hexdigest()
+    report_hash = hashlib.sha256(json.dumps(json_report, sort_keys=True, cls=CustomEncoder).encode()).hexdigest()
     db_report = ComplianceReport(
         id=report_id,
         tenant_id=tenant_id,
@@ -256,6 +294,7 @@ def generate_pdf(data: dict) -> Response:
     Story.append(Paragraph(f"Decisions Allowed: {summary['decisions_allowed']}", normal_style))
     Story.append(Paragraph(f"Decisions Denied: {summary['decisions_denied']}", normal_style))
     Story.append(Paragraph(f"Injection Attempts Detected: {summary['injection_attempts_detected']}", normal_style))
+    Story.append(Paragraph(f"Temporal (Sleeper) Attacks Detected: {summary['temporal_attacks_detected']}", normal_style))
     Story.append(Paragraph(f"Manual Remediations: {summary['manual_remediations']}", normal_style))
     
     color = "green" if summary['audit_chain_intact'] else "red"

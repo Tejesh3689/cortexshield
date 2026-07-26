@@ -90,6 +90,44 @@ async def get_sequence_score(tenant_id: str, agent_id: str, tool_name: str) -> d
 from sqlalchemy.ext.asyncio import AsyncSession
 from cortex_db.hash_chain import append_audit_log
 
+async def calculate_behavioral_deviation(tenant_id: str, agent_id: str, current_tool: str, content_length: float, session: AsyncSession = None) -> float:
+    from sqlalchemy import select
+    from cortex_db.models import AgentBehavioralProfile
+    from cortex_proxy.db import async_session_maker
+    
+    async def _do_calc(db):
+        res = await db.execute(
+            select(AgentBehavioralProfile)
+            .where(AgentBehavioralProfile.tenant_id == tenant_id)
+            .where(AgentBehavioralProfile.agent_id == agent_id)
+            .where(AgentBehavioralProfile.is_stable == True)
+            .order_by(AgentBehavioralProfile.updated_at.desc())
+            .limit(1)
+        )
+        profile = res.scalars().first()
+        if not profile:
+            return 0.0
+            
+        expected_fraction = profile.tool_distribution.get(current_tool, 0.0)
+        tool_deviation = 10.0 if expected_fraction < 0.01 else 0.0
+        
+        if profile.stddev_content_length_bytes and profile.stddev_content_length_bytes > 0:
+            z_score = abs(content_length - (profile.avg_content_length_bytes or 0)) / profile.stddev_content_length_bytes
+        else:
+            z_score = 0.0
+            
+        current_hour = str(datetime.utcnow().hour)
+        expected_hour_fraction = profile.hourly_distribution.get(current_hour, 0.0)
+        time_deviation = 1.0 if expected_hour_fraction < 0.02 else 0.0
+        
+        return (tool_deviation * 0.6) + (min(z_score, 5.0) * 0.3) + (time_deviation * 0.1)
+
+    if session:
+        return await _do_calc(session)
+    else:
+        async with async_session_maker() as db:
+            return await _do_calc(db)
+
 async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str, session: AsyncSession = None) -> FirewallDecision:
     """
     Evaluate a tool call request and return a FirewallDecision.
@@ -122,11 +160,22 @@ async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str, sessio
     tool_args = str(request.params.get("arguments", {}))
     tool_args_hash = hashlib.sha256(tool_args.encode()).hexdigest()
 
+    import json
+    content_length = len(json.dumps(request.params.get("arguments", {}))) if isinstance(request.params.get("arguments", {}), dict) else len(tool_args)
+    deviation = await calculate_behavioral_deviation(tenant_id, agent_id, tool_name, content_length, session)
+
     # Anomaly score — returns full dict with is_anomaly flag
     anomaly_result = await get_sequence_score(tenant_id, agent_id, tool_name)
     sequence_score = anomaly_result.get("sequence_score", 0.0)
-    is_anomaly = anomaly_result.get("is_anomaly", False)
+    
+    if deviation > 5.0:
+        sequence_score += (deviation * 0.1)
+        logger.warning(f"Behavioral deviation for {agent_id}: score {deviation:.2f}")
+
+    is_anomaly = anomaly_result.get("is_anomaly", False) or (sequence_score > 0.8)
     anomaly_reason = anomaly_result.get("reason", "")
+    if deviation > 5.0:
+        anomaly_reason += f" | High behavioral deviation: {deviation:.2f}"
 
     # Python-native policy evaluation (replaces OPA for hackathon)
     min_trust = float(os.getenv("FIREWALL_MIN_TRUST_THRESHOLD", "0.3"))
@@ -196,7 +245,7 @@ async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str, sessio
         })
         WITH d
         MATCH (f:Entity {tenant_id: $tenant_id})-[r]->(o)
-        WHERE r.status = 'ACTIVE'
+        WHERE r.status IN ['ACTIVE', 'FLAGGED_POISON']
         CREATE (d)-[:INFLUENCED_BY {trust_contribution: r.trust_score, fact_type: type(r)}]->(f)
         """
         driver = get_driver()
@@ -212,6 +261,38 @@ async def decide(request: ToolCallRequest, tenant_id: str, agent_id: str, sessio
                 "agent_id": agent_id,
                 "audit_log_ref": audit_log_index_id
             })
+            
+            if deviation > 8.0:
+                alert_id = str(uuid.uuid4())
+                cypher_alert = """
+                CREATE (a:BehavioralAlert {
+                    id: $alert_id,
+                    tenant_id: $tenant_id,
+                    agent_id: $agent_id,
+                    alert_type: 'BEHAVIORAL_DEVIATION',
+                    deviation_score: $deviation_score,
+                    detected_at: datetime(),
+                    status: 'OPEN',
+                    tool_name: $tool_name
+                })
+                """
+                nsession.run(cypher_alert, {
+                    "alert_id": alert_id,
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "deviation_score": deviation,
+                    "tool_name": tool_name
+                })
+                
+        if deviation > 8.0 and session:
+            await append_audit_log(
+                session=session,
+                tenant_id=tenant_id,
+                event_type="behavioral_alert",
+                event_ref=alert_id,
+                payload={"agent_id": agent_id, "deviation_score": deviation, "tool_name": tool_name}
+            )
+
     except Exception as e:
         logger.error(f"Failed to write AuditDecision to Neo4j: {e}", exc_info=True)
 

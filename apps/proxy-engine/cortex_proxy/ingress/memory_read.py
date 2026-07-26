@@ -20,11 +20,22 @@ async def handle_get_memory(request: ToolCallRequest, tenant_id: str, agent_id: 
             query = """
             MATCH (s:Entity {id: $subject, tenant_id: $tenant_id})-[r]->(o:Entity)
             WHERE r.status = 'ACTIVE'
-            RETURN type(r) as predicate, o.id as object, r.trust_score as trust
+            RETURN type(r) as predicate, o.id as object, r.trust_score as trust, elementId(r) as edge_id
             ORDER BY r.created_at DESC
             """
             result = await session.run(query, subject=subject, tenant_id=tenant_id)
             records = await result.data()
+            
+            if records:
+                edge_ids = [record["edge_id"] for record in records]
+                update_query = """
+                MATCH ()-[r]->() WHERE elementId(r) IN $edge_ids
+                SET r.reference_count = coalesce(r.reference_count, 0) + 1,
+                    r.last_referenced_at = datetime(),
+                    r.reference_history = coalesce(r.reference_history, []) + [toString(datetime())]
+                SET r.reference_history = r.reference_history[-20..]
+                """
+                await session.run(update_query, edge_ids=edge_ids)
             
             if not records:
                 return ToolCallResponse(id=request.id, result={"content": [{"type": "text", "text": "No facts stored yet for this subject."}], "isError": False})
@@ -53,11 +64,22 @@ async def handle_search_memory(request: ToolCallRequest, tenant_id: str, agent_i
                 toLower(o.id) CONTAINS toLower($query) OR
                 toLower(type(r)) CONTAINS toLower($query)
             )
-            RETURN s.id as subject, type(r) as predicate, o.id as object, r.trust_score as trust
+            RETURN s.id as subject, type(r) as predicate, o.id as object, r.trust_score as trust, elementId(r) as edge_id
             ORDER BY r.trust_score DESC LIMIT 5
             """
             result = await session.run(cypher, query=query_str, tenant_id=tenant_id)
             records = await result.data()
+            
+            if records:
+                edge_ids = [record["edge_id"] for record in records]
+                update_query = """
+                MATCH ()-[r]->() WHERE elementId(r) IN $edge_ids
+                SET r.reference_count = coalesce(r.reference_count, 0) + 1,
+                    r.last_referenced_at = datetime(),
+                    r.reference_history = coalesce(r.reference_history, []) + [toString(datetime())]
+                SET r.reference_history = r.reference_history[-20..]
+                """
+                await session.run(update_query, edge_ids=edge_ids)
             
             if not records:
                 return ToolCallResponse(id=request.id, result={"content": [{"type": "text", "text": "No matching facts found."}], "isError": False})

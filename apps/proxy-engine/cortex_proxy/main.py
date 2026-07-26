@@ -28,21 +28,34 @@ repo_root = service_dir.parent.parent
 load_dotenv(repo_root / ".env")
 load_dotenv(service_dir / ".env", override=True)
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .ingress.jsonrpc_interceptor import process_jsonrpc
 from .db import get_db_session
 from .compliance.router import router as compliance_router
+from .alerts.router import router as alerts_router
+from .agents.router import router as agents_router
+from .tasks.sleeper_detection import detect_sleeper_attacks
+from .tasks.behavior_profiler import profile_all_agents
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("proxy-engine")
 
+scheduler = AsyncIOScheduler()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Proxy-Engine starting up...")
+    scheduler.add_job(detect_sleeper_attacks, 'interval', minutes=30)
+    scheduler.add_job(profile_all_agents, 'interval', hours=1)
+    scheduler.start()
     yield
+    scheduler.shutdown()
     logger.info("Proxy-Engine shutting down...")
 
 app = FastAPI(title="CortexShield Proxy Engine", lifespan=lifespan)
 app.include_router(compliance_router, prefix="/v1/compliance")
+app.include_router(alerts_router, prefix="/v1/alerts")
+app.include_router(agents_router, prefix="/v1/agents")
 
 # --- OpenTelemetry & Prometheus Setup ---
 resource = Resource(attributes={"service.name": "proxy-engine"})
@@ -111,10 +124,14 @@ async def check_rate_limit(request: Request, response: Response, db: AsyncSessio
     current_minute = int(time.time() // 60)
     redis_key = f"rate_limit:{key_hash}:{current_minute}"
 
-    async with redis_client.pipeline(transaction=True) as pipe:
-        pipe.incr(redis_key)
-        pipe.expire(redis_key, 60)
-        res = await pipe.execute()
+    try:
+        async with redis_client.pipeline(transaction=True) as pipe:
+            pipe.incr(redis_key)
+            pipe.expire(redis_key, 60)
+            res = await pipe.execute()
+    except Exception as e:
+        logger.warning(f"Rate limiter failed: {e}")
+        return
 
     current_count = res[0]
     remaining = max(0, limit - current_count)
@@ -239,6 +256,23 @@ async def handle_tool_call(
         })
         await db.commit()
         
+        # Publish behavioral event
+        try:
+            tool_args_raw = data.get("params", {}).get("arguments", {})
+            import json
+            content_len = len(json.dumps(tool_args_raw)) if isinstance(tool_args_raw, dict) else len(str(tool_args_raw))
+            await redis_client.xadd(
+                f"behavior:{tenant_id}:{agent_id}",
+                {
+                    "tool_name": tool_name,
+                    "content_length": content_len,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "request_id": str(data.get("id", "unknown"))
+                },
+                maxlen=10000
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record behavior event: {e}")
         # Prometheus metrics
         decision = "DENY" if is_deny else "ALLOW"
         if is_deny:

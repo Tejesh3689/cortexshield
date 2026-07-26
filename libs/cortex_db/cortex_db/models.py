@@ -25,6 +25,35 @@ class TenantOverride(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class TenantPolicy(Base):
+    __tablename__ = "tenant_policies"
+    tenant_id = Column(String(255), ForeignKey("tenants.id"), primary_key=True)
+    sleeper_age_threshold_days = Column(Integer, default=7)
+    sleeper_reference_spike_threshold = Column(Integer, default=3)
+    sleeper_trust_ceiling = Column(Float, default=0.5)
+    alert_webhook_url = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AgentBehavioralProfile(Base):
+    __tablename__ = "agent_behavioral_profiles"
+    id = Column(String(255), primary_key=True)
+    tenant_id = Column(String(255), ForeignKey("tenants.id"), nullable=False)
+    agent_id = Column(String(255), nullable=False)
+    profile_period_start = Column(DateTime, nullable=False)
+    profile_period_end = Column(DateTime, nullable=False)
+    tool_distribution = Column(JSONB, nullable=False, default={})
+    avg_content_length_bytes = Column(Float, nullable=True)
+    stddev_content_length_bytes = Column(Float, nullable=True)
+    avg_calls_per_session = Column(Float, nullable=True)
+    typical_session_duration_minutes = Column(Float, nullable=True)
+    hourly_distribution = Column(JSONB, nullable=False, default={})
+    total_sessions = Column(Integer, nullable=False, default=0)
+    total_calls = Column(Integer, nullable=False, default=0)
+    is_stable = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 class User(Base):
     __tablename__ = "users"
     id = Column(String(255), primary_key=True)

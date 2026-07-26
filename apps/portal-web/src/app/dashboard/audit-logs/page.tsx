@@ -20,7 +20,11 @@ import {
   Sparkles,
   ArrowDown,
   GitMerge,
-  SearchCode
+  SearchCode,
+  Server,
+  Zap,
+  Box,
+  Clock,
 } from "lucide-react";
 
 export interface AuditLogRow {

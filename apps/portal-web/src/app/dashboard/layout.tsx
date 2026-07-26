@@ -1,6 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { Activity, Shield, Network, FileText, ShieldCheck } from "lucide-react";
+import { Shield, Database, FileText, Settings, Activity, AlertTriangle, Cpu, Network, ShieldCheck } from "lucide-react";
 
 export default function DashboardLayout({
   children,
@@ -14,6 +14,15 @@ export default function DashboardLayout({
       !key.includes("placeholder") &&
       key.length > 30
   );
+
+  const navigation = [
+    { name: "Overview", href: "/dashboard", icon: Activity },
+    { name: "Alerts", href: "/dashboard/alerts", icon: AlertTriangle },
+    { name: "Agents", href: "/dashboard/agents", icon: Cpu },
+    { name: "Memory Graph", href: "/dashboard/graph", icon: Database },
+    { name: "Compliance", href: "/dashboard/compliance", icon: FileText },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  ];
 
   return (
     <div className="flex h-screen bg-slate-950" suppressHydrationWarning>
@@ -33,8 +42,14 @@ export default function DashboardLayout({
           <Link href="/dashboard/audit-logs" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
             <FileText size={18} /> Audit Logs
           </Link>
+          <Link href="/dashboard/agents" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
+            <Cpu size={18} /> Agents
+          </Link>
           <Link href="/dashboard/policies" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
             <Shield size={18} /> Policies
+          </Link>
+          <Link href="/dashboard/alerts" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
+            <AlertTriangle size={18} /> Alerts
           </Link>
           <Link href="/dashboard/compliance" className="flex items-center gap-2 p-2 hover:bg-slate-800 rounded text-slate-300 hover:text-white">
             <ShieldCheck size={18} /> Compliance
